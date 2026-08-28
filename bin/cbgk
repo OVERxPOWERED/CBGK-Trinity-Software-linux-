@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""
+CBGK CLI: Cosmic Byte Trinity Gaming Keyboard Control Center.
+"""
+
+import sys
+import os
+import time
+import argparse
+import subprocess
+
+# Ensure cbgk package is in sys.path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from cbgk.device import Device, DeviceError
+from cbgk.protocol import Protocol
+from cbgk.matrix import LIGHTING_MODES, hex_to_rgb, KEYS_87
+from cbgk.profiles import ProfileManager
+from cbgk.daemon import Daemon, send_ipc_command, PID_FILE, SOCKET_PATH
+
+def cmd_color(args):
+    color_hex = args.hex
+    if not color_hex.startswith("#"):
+        color_hex = "#" + color_hex
+
+    # Try communicating with background daemon first
+    try:
+        resp = send_ipc_command("set_color", color=color_hex)
+        print(f"[✔] {resp.get('message', f'Applied color {color_hex}')}")
+        return
+    except ConnectionError:
+        pass
+
+    # Direct hardware fallback
+    r, g, b = hex_to_rgb(color_hex)
+    try:
+        with Device() as dev:
+            Protocol.set_solid_color(dev, r, g, b)
+        print(f"[✔] Applied solid color {color_hex} directly to hardware.")
+        print("[*] Note: For persistent continuous lighting, start the daemon: 'cbgk daemon start'")
+    except DeviceError as e:
+        print(f"[!] Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_mode(args):
+    mode_name = args.mode.lower()
+    if mode_name not in LIGHTING_MODES:
+        print(f"[!] Unknown mode '{mode_name}'. Valid modes are:\n  " + ", ".join(LIGHTING_MODES.keys()), file=sys.stderr)
+        sys.exit(1)
+
+    color_hex = args.color
+    if not color_hex.startswith("#"):
+        color_hex = "#" + color_hex
+
+    try:
+        resp = send_ipc_command("set_mode", mode=mode_name, color=color_hex, speed=args.speed, brightness=args.brightness)
+        print(f"[✔] {resp.get('message', f'Applied mode {mode_name}')}")
+        return
+    except ConnectionError:
+        pass
+
+    mode_id = LIGHTING_MODES[mode_name]
+    r, g, b = hex_to_rgb(color_hex)
+    try:
+        with Device() as dev:
+            Protocol.set_preset_mode(
+                dev,
+                mode_id=mode_id,
+                speed=args.speed,
+                brightness=args.brightness,
+                r=r,
+                g=g,
+                b=b
+            )
+        print(f"[✔] Preset mode '{mode_name}' committed to hardware EEPROM!")
+    except DeviceError as e:
+        print(f"[!] Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_profile(args):
+    pm = ProfileManager()
+    action = args.action
+
+    if action == "list":
+        profiles = pm.list_profiles()
+        active = pm.get_active_profile_name()
+        print("\n=== CBGK Stored Profiles ===")
+        for p in profiles:
+            is_act = " (ACTIVE)" if p.get("name") == active else ""
+            print(f" • {p.get('name')}{is_act} - {p.get('description', '')}")
+        print()
+
+    elif action == "load":
+        if not args.name:
+            print("[!] Please specify a profile name: cbgk profile load <name>", file=sys.stderr)
+            sys.exit(1)
+        name = args.name
+        try:
+            resp = send_ipc_command("apply_profile", profile=name)
+            if resp.get("status") == "ok":
+                print(f"[✔] {resp.get('message')}")
+            else:
+                print(f"[!] Error: {resp.get('message')}", file=sys.stderr)
+                sys.exit(1)
+        except ConnectionError:
+            prof = pm.get_profile(name)
+            if not prof:
+                print(f"[!] Profile '{name}' not found.", file=sys.stderr)
+                sys.exit(1)
+            pm.set_active_profile_name(name)
+            print(f"[✔] Set active profile to '{name}'. Start daemon to run it: 'cbgk daemon start'")
+
+    elif action == "delete":
+        if not args.name:
+            print("[!] Please specify a profile name: cbgk profile delete <name>", file=sys.stderr)
+            sys.exit(1)
+        if pm.delete_profile(args.name):
+            print(f"[✔] Profile '{args.name}' deleted.")
+        else:
+            print(f"[!] Profile '{args.name}' does not exist.", file=sys.stderr)
+
+def cmd_daemon(args):
+    action = args.action
+
+    if action == "start":
+        if os.path.exists(PID_FILE):
+            try:
+                send_ipc_command("ping")
+                print("[*] CBGK daemon is already running.")
+                return
+            except Exception:
+                # Clean up stale files
+                if os.path.exists(PID_FILE): os.remove(PID_FILE)
+                if os.path.exists(SOCKET_PATH): os.remove(SOCKET_PATH)
+
+        if args.foreground:
+            daemon = Daemon()
+            daemon.start()
+        else:
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env = dict(os.environ, PYTHONPATH=project_dir)
+            cmd = [sys.executable, "-m", "cbgk.daemon"]
+            proc = subprocess.Popen(
+                cmd,
+                cwd=project_dir,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            time.sleep(0.5)
+            print(f"[✔] CBGK Daemon launched in background (PID {proc.pid}).")
+
+    elif action == "stop":
+        try:
+            resp = send_ipc_command("stop")
+            print(f"[✔] {resp.get('message', 'Daemon stopped')}")
+        except ConnectionError:
+            print("[*] Daemon is not currently running.")
+
+    elif action == "status":
+        try:
+            resp = send_ipc_command("status")
+            data = resp.get("data", {})
+            print("\n=== CBGK Daemon Status ===")
+            print(f" Status:        RUNNING")
+            print(f" Device:        {data.get('device_path') or 'Searching...'}")
+            print(f" Connected:     {'YES (Wired)' if data.get('connected') else 'NO'}")
+            print(f" Active Profile:{data.get('active_profile')}")
+            print()
+        except ConnectionError:
+            print("[*] Daemon is STOPPED.")
+
+def cmd_info(args):
+    try:
+        path = Device.find_device()
+        print("\n=== Cosmic Byte Trinity Status ===")
+        print(f" Device Node:   {path}")
+        print(f" Vendor ID:     0x0C45 (Sonix / Microdia)")
+        print(f" Product ID:    0x8006 (Trinity TKL)")
+        print(f" Connection:    USB-C Wired Active")
+        print()
+    except DeviceError as e:
+        print(f"[!] {e}")
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="cbgk",
+        description="Cosmic Byte Trinity Gaming Keyboard Linux Driver & Control Center"
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # color
+    p_color = subparsers.add_parser("color", help="Set uniform RGB color across all keys")
+    p_color.add_argument("hex", help="Hex color code (e.g. #CB94F7, CB94F7)")
+    p_color.set_defaults(func=cmd_color)
+
+    # mode
+    p_mode = subparsers.add_parser("mode", help="Set preset lighting animation mode")
+    p_mode.add_argument("mode", help="Mode name (e.g. static, breathing, spectrum, reactive, etc.)")
+    p_mode.add_argument("--color", default="#CB94F7", help="Preset color hex (default: #CB94F7)")
+    p_mode.add_argument("--speed", type=int, default=3, choices=range(1, 6), help="Animation speed (1-5)")
+    p_mode.add_argument("--brightness", type=int, default=4, choices=range(0, 5), help="Brightness level (0-4)")
+    p_mode.set_defaults(func=cmd_mode)
+
+    # profile
+    p_prof = subparsers.add_parser("profile", help="Manage lighting and keyboard profiles")
+    p_prof.add_argument("action", choices=["list", "load", "delete"], help="Profile action")
+    p_prof.add_argument("name", nargs="?", help="Profile name")
+    p_prof.set_defaults(func=cmd_profile)
+
+    # daemon
+    p_daemon = subparsers.add_parser("daemon", help="Manage background lighting daemon")
+    p_daemon.add_argument("action", choices=["start", "stop", "status"], help="Daemon action")
+    p_daemon.add_argument("-f", "--foreground", action="store_true", help="Run in foreground")
+    p_daemon.set_defaults(func=cmd_daemon)
+
+    # info
+    p_info = subparsers.add_parser("info", help="Display hardware connection information")
+    p_info.set_defaults(func=cmd_info)
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    args = parser.parse_args()
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

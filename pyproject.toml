@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbgk"
+version = "1.0.0"
+description = "Linux Driver and Material 3 Control Center for Cosmic Byte Trinity Gaming Keyboard"
+authors = [{ name = "OVERxPOWERED" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "PyQt6>=6.4.0",
+    "Pillow>=9.0.0",
+]
+
+[project.scripts]
+cbgk = "bin.cbgk:main"
+cbgk-gui = "bin.cbgk_gui:main"

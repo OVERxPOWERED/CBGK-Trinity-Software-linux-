@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=CBGK Control Center
+Comment=Cosmic Byte Trinity RGB Keyboard Software
+Exec=cbgk-gui
+Icon=input-keyboard
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Utility;
+Keywords=Keyboard;RGB;CosmicByte;Trinity;Gaming;
