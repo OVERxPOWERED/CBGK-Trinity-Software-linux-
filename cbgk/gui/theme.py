@@ -1,98 +1,91 @@
 """
-Apple / Linear-inspired Minimalist Dark Theme with Electric Violet Accents.
+LuminKey / Apple Monochrome Liquid Glass Theme.
+Pure Black & White with Translucent Frosted Glass.
 """
 
-APPLE_DARK_PALETTE = {
-    "bg_main": "#0D0D11",
-    "bg_sidebar": "#121216",
-    "bg_card": "#17171C",
-    "bg_card_hover": "#1F1F26",
-    "bg_card_selected": "#211A2E",
+LUMINKEY_PALETTE = {
+    "bg_window": "#08080A",
+    "bg_sidebar": "rgba(14, 14, 17, 0.85)",
+    "bg_card": "rgba(22, 22, 27, 0.70)",
+    "bg_card_hover": "rgba(32, 32, 38, 0.80)",
+    "bg_card_selected": "rgba(42, 42, 50, 0.90)",
     "border": "rgba(255, 255, 255, 0.08)",
-    "border_hover": "rgba(255, 255, 255, 0.16)",
-    "border_active": "#9333EA",
-    "accent_purple": "#9333EA",
-    "accent_purple_light": "#A855F7",
+    "border_hover": "rgba(255, 255, 255, 0.18)",
+    "border_active": "rgba(255, 255, 255, 0.35)",
     "text_primary": "#FFFFFF",
-    "text_secondary": "#9CA3AF",
-    "text_muted": "#6B7280",
-    "success": "#10B981",
+    "text_secondary": "#9E9EA7",
+    "text_muted": "#5C5C64",
+    "pill_active": "rgba(255, 255, 255, 0.12)",
+    "pill_hover": "rgba(255, 255, 255, 0.06)",
+    "traffic_red": "#FF5F56",
+    "traffic_yellow": "#FFBD2E",
+    "traffic_green": "#27C93F",
 }
 
-APPLE_STYLESHEET = f"""
+LUMINKEY_STYLESHEET = f"""
 QMainWindow {{
-    background-color: {APPLE_DARK_PALETTE['bg_main']};
-    color: {APPLE_DARK_PALETTE['text_primary']};
+    background-color: {LUMINKEY_PALETTE['bg_window']};
+    color: {LUMINKEY_PALETTE['text_primary']};
 }}
 
 QWidget {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Roboto', sans-serif;
     font-size: 13px;
-    color: {APPLE_DARK_PALETTE['text_primary']};
+    color: {LUMINKEY_PALETTE['text_primary']};
 }}
 
-/* Sidebar Rail */
-QFrame#sidebar_rail {{
-    background-color: {APPLE_DARK_PALETTE['bg_sidebar']};
-    border-right: 1px solid {APPLE_DARK_PALETTE['border']};
+/* Sidebar */
+QFrame#sidebar {{
+    background-color: {LUMINKEY_PALETTE['bg_sidebar']};
+    border-right: 1px solid {LUMINKEY_PALETTE['border']};
 }}
 
-/* Top Breadcrumb Bar */
-QFrame#top_bar {{
-    background-color: {APPLE_DARK_PALETTE['bg_main']};
-    border-bottom: 1px solid {APPLE_DARK_PALETTE['border']};
+/* Frosted Showcase & Parameter Cards */
+QFrame.glass-panel {{
+    background-color: {LUMINKEY_PALETTE['bg_card']};
+    border: 1px solid {LUMINKEY_PALETTE['border']};
+    border-radius: 16px;
 }}
 
-/* Card Container */
-QFrame.modern-card {{
-    background-color: {APPLE_DARK_PALETTE['bg_card']};
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
-    border-radius: 12px;
+QFrame.glass-card {{
+    background-color: {LUMINKEY_PALETTE['bg_card']};
+    border: 1px solid {LUMINKEY_PALETTE['border']};
+    border-radius: 14px;
 }}
 
-QFrame.modern-card:hover {{
-    border-color: {APPLE_DARK_PALETTE['border_hover']};
-    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
+QFrame.glass-card:hover {{
+    background-color: {LUMINKEY_PALETTE['bg_card_hover']};
+    border-color: {LUMINKEY_PALETTE['border_hover']};
 }}
 
-/* Selectable Cards (like Reference UI) */
-QFrame.select-card {{
-    background-color: {APPLE_DARK_PALETTE['bg_card']};
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
-    border-radius: 12px;
-}}
-
-QFrame.select-card:hover {{
-    border-color: {APPLE_DARK_PALETTE['border_hover']};
-    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
-}}
-
-QFrame.select-card[selected="true"] {{
-    border: 1.5px solid {APPLE_DARK_PALETTE['border_active']};
-    background-color: {APPLE_DARK_PALETTE['bg_card_selected']};
-}}
-
-/* Sidebar Icon Buttons */
-QPushButton.sidebar-btn {{
+/* LuminKey Nav Pill Buttons */
+QPushButton.luminkey-nav {{
     background-color: transparent;
+    color: {LUMINKEY_PALETTE['text_secondary']};
     border: none;
     border-radius: 10px;
-    padding: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
 }}
 
-QPushButton.sidebar-btn:hover {{
-    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
-}}
-
-QPushButton.sidebar-btn:checked {{
-    background-color: rgba(147, 51, 234, 0.20);
-    border: 1px solid rgba(168, 85, 247, 0.40);
-}}
-
-/* Primary Apple Action Button (Purple Pill) */
-QPushButton.btn-primary {{
-    background-color: {APPLE_DARK_PALETTE['accent_purple']};
+QPushButton.luminkey-nav:hover {{
+    background-color: {LUMINKEY_PALETTE['pill_hover']};
     color: #FFFFFF;
+}}
+
+QPushButton.luminkey-nav:checked {{
+    background-color: {LUMINKEY_PALETTE['pill_active']};
+    color: #FFFFFF;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}}
+
+/* Action Buttons */
+QPushButton.btn-primary {{
+    background-color: #FFFFFF;
+    color: #000000;
     border: none;
     border-radius: 8px;
     padding: 8px 18px;
@@ -101,70 +94,48 @@ QPushButton.btn-primary {{
 }}
 
 QPushButton.btn-primary:hover {{
-    background-color: {APPLE_DARK_PALETTE['accent_purple_light']};
+    background-color: #E5E5EA;
 }}
 
-QPushButton.btn-primary:pressed {{
-    background-color: #7E22CE;
-}}
-
-/* Ghost / Secondary Button */
 QPushButton.btn-ghost {{
-    background-color: transparent;
-    color: {APPLE_DARK_PALETTE['text_secondary']};
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #FFFFFF;
+    border: 1px solid {LUMINKEY_PALETTE['border']};
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 7px 14px;
     font-weight: 500;
 }}
 
 QPushButton.btn-ghost:hover {{
-    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
-    color: #FFFFFF;
-    border-color: {APPLE_DARK_PALETTE['border_hover']};
+    background-color: rgba(255, 255, 255, 0.10);
+    border-color: {LUMINKEY_PALETTE['border_hover']};
 }}
 
 /* Apple-style Slider */
 QSlider::groove:horizontal {{
     height: 4px;
-    background: #27272A;
+    background: rgba(255, 255, 255, 0.12);
     border-radius: 2px;
 }}
 
 QSlider::sub-page:horizontal {{
-    background: {APPLE_DARK_PALETTE['accent_purple']};
+    background: #FFFFFF;
     border-radius: 2px;
 }}
 
 QSlider::handle:horizontal {{
     background: #FFFFFF;
-    width: 16px;
-    height: 16px;
-    margin: -6px 0;
-    border-radius: 8px;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+    border: 1px solid rgba(0, 0, 0, 0.3);
 }}
 
-QSlider::handle:horizontal:hover {{
-    background: #E4E4E7;
-}}
-
-/* Minimalist Inputs */
-QLineEdit {{
-    background-color: #121216;
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
-    border-radius: 8px;
-    padding: 6px 12px;
-    color: #FFFFFF;
-}}
-
-QLineEdit:focus {{
-    border-color: {APPLE_DARK_PALETTE['accent_purple']};
-}}
-
-/* Minimalist Combo */
+/* Combobox */
 QComboBox {{
-    background-color: #121216;
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid {LUMINKEY_PALETTE['border']};
     border-radius: 8px;
     padding: 6px 12px;
     color: #FFFFFF;
@@ -176,11 +147,23 @@ QComboBox::drop-down {{
 }}
 
 QComboBox QAbstractItemView {{
-    background-color: #121216;
-    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    background-color: #16161B;
+    border: 1px solid {LUMINKEY_PALETTE['border']};
     border-radius: 8px;
-    selection-background-color: rgba(147, 51, 234, 0.3);
+    selection-background-color: rgba(255, 255, 255, 0.15);
     color: #FFFFFF;
     padding: 4px;
+}}
+
+/* Scrollbar */
+QScrollBar:vertical {{
+    border: none;
+    background: transparent;
+    width: 6px;
+}}
+
+QScrollBar::handle:vertical {{
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
 }}
 """
