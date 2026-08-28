@@ -1,5 +1,5 @@
 """
-Interactive Mechanical Keyboard Canvas with Click-to-Paint and LED Glow Shaders.
+Interactive Mechanical Keyboard Canvas — LuminKey monochrome dark style.
 """
 
 from typing import Dict, List, Set, Optional, Tuple
@@ -10,181 +10,181 @@ from PyQt6.QtGui import (
     QRadialGradient, QLinearGradient
 )
 
-from ..matrix import KEYS_87, KeyInfo, hex_to_rgb, rgb_to_hex
+from ..matrix import KEYS_87, KeyInfo, hex_to_rgb
 
 class KeyboardCanvas(QWidget):
     """Interactive Graphical 87-Key Mechanical Keyboard Widget."""
 
-    selectionChanged = pyqtSignal(list) # Emits list of selected KeyInfo objects
-    keyColorChanged = pyqtSignal(str, str) # Emits (key_name, hex_color)
-    keyboardChanged = pyqtSignal()      # Emits on any change
+    selectionChanged = pyqtSignal(list)
+    keyColorChanged = pyqtSignal(str, str)
+    keyboardChanged = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(800, 270)
         self.setMouseTracking(True)
 
-        # Color mapping: Key name -> Hex color string
+        # Color mapping: key_name -> hex color
         self.key_colors: Dict[str, str] = {k.name: "#CB94F7" for k in KEYS_87}
         self.active_paint_color = "#CB94F7"
 
-        # Selection state
-        self.selected_keys: Set[int] = set() # Set of key matrix indices
+        # Selection state: set of key names (not matrix_idx to avoid mismatches)
+        self.selected_key_names: Set[str] = set()
         self.hovered_key: Optional[KeyInfo] = None
 
-        # Drag selection box
+        # Drag selection
         self.drag_start: Optional[QPointF] = None
         self.drag_current: Optional[QPointF] = None
+
+        # Suppress hardware dispatch while batch-painting
+        self._suppress_notify = False
 
     def set_active_paint_color(self, color_hex: str):
         self.active_paint_color = color_hex
 
     def set_key_color(self, key_name: str, color_hex: str, notify=True):
-        """Sets the LED color for a specific key."""
         self.key_colors[key_name] = color_hex
-        if notify:
+        if notify and not self._suppress_notify:
             self.keyColorChanged.emit(key_name, color_hex)
             self.keyboardChanged.emit()
         self.update()
 
     def set_all_colors(self, color_hex: str):
-        """Sets all keys to a uniform color."""
+        self._suppress_notify = True
         for k in KEYS_87:
             self.key_colors[k.name] = color_hex
+        self._suppress_notify = False
         self.keyboardChanged.emit()
         self.update()
 
     def set_color_map(self, color_map: Dict[str, str]):
-        """Sets the full color map."""
-        self.key_colors.update(color_map)
+        for name, col in color_map.items():
+            self.key_colors[name] = col
+        self.update()
+
+    def paint_selected(self, color_hex: str):
+        """Paints all selected keys with the given color, then notifies once."""
+        if not self.selected_key_names:
+            self.set_all_colors(color_hex)
+            return
+        self._suppress_notify = True
+        for name in self.selected_key_names:
+            self.key_colors[name] = color_hex
+        self._suppress_notify = False
+        self.keyboardChanged.emit()
         self.update()
 
     def select_keys_by_category(self, category: str):
-        """Quick selection helper (e.g. 'all', 'wasd', 'arrows', 'nav', 'function')."""
-        self.selected_keys.clear()
+        self.selected_key_names.clear()
         if category == "all":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87}
+            self.selected_key_names = {k.name for k in KEYS_87}
         elif category == "wasd":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87 if k.name.lower() in ["w", "a", "s", "d"]}
+            self.selected_key_names = {k.name for k in KEYS_87 if k.name in ("W", "A", "S", "D")}
         elif category == "arrows":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87 if k.category == "arrow"}
+            self.selected_key_names = {k.name for k in KEYS_87 if k.category == "arrow"}
         elif category == "function":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87 if k.category == "function"}
+            self.selected_key_names = {k.name for k in KEYS_87 if k.category == "function"}
         elif category == "nav":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87 if k.category == "nav"}
+            self.selected_key_names = {k.name for k in KEYS_87 if k.category == "nav"}
         elif category == "mods":
-            self.selected_keys = {k.matrix_idx for k in KEYS_87 if k.category == "mod"}
-
+            self.selected_key_names = {k.name for k in KEYS_87 if k.category == "mod"}
         self._emit_selection()
         self.update()
 
     def clear_selection(self):
-        self.selected_keys.clear()
+        self.selected_key_names.clear()
         self._emit_selection()
         self.update()
 
     def _emit_selection(self):
-        selected = [k for k in KEYS_87 if k.matrix_idx in self.selected_keys]
+        selected = [k for k in KEYS_87 if k.name in self.selected_key_names]
         self.selectionChanged.emit(selected)
 
     def _calculate_geometry(self) -> Tuple[float, float, float, float]:
-        pad_x = 16.0
-        pad_y = 14.0
-        avail_w = self.width() - (pad_x * 2)
-        avail_h = self.height() - (pad_y * 2)
+        pad_x, pad_y = 16.0, 14.0
+        avail_w = self.width() - pad_x * 2
+        avail_h = self.height() - pad_y * 2
+        unit = min(avail_w / 18.5, avail_h / 6.4)
+        off_x = (self.width() - 18.5 * unit) / 2
+        off_y = (self.height() - 6.4 * unit) / 2
+        return off_x, off_y, unit, unit
 
-        unit_w = avail_w / 18.5
-        unit_h = avail_h / 6.4
-        unit_size = min(unit_w, unit_h)
-
-        offset_x = (self.width() - (18.5 * unit_size)) / 2
-        offset_y = (self.height() - (6.4 * unit_size)) / 2
-
-        return offset_x, offset_y, unit_size, unit_size
-
-    def _get_key_rect(self, k: KeyInfo, off_x: float, off_y: float, u_w: float, u_h: float) -> QRectF:
-        gap = 3.5
-        x = off_x + (k.x * u_w) + (gap / 2)
-        y = off_y + (k.y * u_h) + (gap / 2)
-        w = (k.width * u_w) - gap
-        h = (k.height * u_h) - gap
-        return QRectF(x, y, w, h)
+    def _key_rect(self, k: KeyInfo, ox: float, oy: float, uw: float, uh: float) -> QRectF:
+        gap = 3.0
+        return QRectF(
+            ox + k.x * uw + gap / 2,
+            oy + k.y * uh + gap / 2,
+            k.width * uw - gap,
+            k.height * uh - gap,
+        )
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
-        off_x, off_y, u_w, u_h = self._calculate_geometry()
+        ox, oy, uw, uh = self._calculate_geometry()
 
-        # 1. Outer Chassis (Matte Black with subtle edge)
-        case_rect = QRectF(off_x - 10, off_y - 10, (18.5 * u_w) + 20, (6.4 * u_h) + 20)
-        case_path = QPainterPath()
-        case_path.addRoundedRect(case_rect, 12, 12)
+        # Chassis
+        case = QRectF(ox - 12, oy - 12, 18.5 * uw + 24, 6.4 * uh + 24)
+        cp = QPainterPath()
+        cp.addRoundedRect(case, 14, 14)
+        p.fillPath(cp, QColor(20, 20, 24))
+        p.strokePath(cp, QPen(QColor(255, 255, 255, 15), 1.0))
 
-        painter.fillPath(case_path, QColor(18, 18, 22))
-        painter.strokePath(case_path, QPen(QColor(255, 255, 255, 18), 1.0))
-
-        # 2. Keycaps & LED Lighting
-        font_main = QFont("-apple-system", int(u_h * 0.22), QFont.Weight.DemiBold)
-        painter.setFont(font_main)
+        font = QFont("Inter", max(7, int(uh * 0.20)), QFont.Weight.DemiBold)
+        p.setFont(font)
 
         for k in KEYS_87:
-            rect = self._get_key_rect(k, off_x, off_y, u_w, u_h)
-            color_hex = self.key_colors.get(k.name, "#CB94F7")
-            r, g, b = hex_to_rgb(color_hex)
+            r_rect = self._key_rect(k, ox, oy, uw, uh)
+            col_hex = self.key_colors.get(k.name, "#CB94F7")
+            cr, cg, cb = hex_to_rgb(col_hex)
 
-            is_selected = k.matrix_idx in self.selected_keys
-            is_hovered = self.hovered_key and self.hovered_key.matrix_idx == k.matrix_idx
+            selected = k.name in self.selected_key_names
+            hovered = self.hovered_key is not None and self.hovered_key.name == k.name
 
-            # A. LED Underglow Halo
-            glow_rect = rect.adjusted(-5, -5, 5, 5)
-            glow_grad = QRadialGradient(rect.center(), rect.width() * 0.8)
-            glow_grad.setColorAt(0.0, QColor(r, g, b, 120))
-            glow_grad.setColorAt(0.6, QColor(r, g, b, 30))
-            glow_grad.setColorAt(1.0, QColor(r, g, b, 0))
-            painter.fillRect(glow_rect, QBrush(glow_grad))
+            # Subtle LED underglow
+            gr = QRadialGradient(r_rect.center(), r_rect.width() * 0.7)
+            gr.setColorAt(0.0, QColor(cr, cg, cb, 50))
+            gr.setColorAt(1.0, QColor(cr, cg, cb, 0))
+            p.fillRect(r_rect.adjusted(-3, -3, 3, 3), QBrush(gr))
 
-            # B. Keycap Body
-            key_path = QPainterPath()
-            key_path.addRoundedRect(rect, 5, 5)
+            # Keycap body
+            kp = QPainterPath()
+            kp.addRoundedRect(r_rect, 5, 5)
 
-            if is_selected:
-                key_fill = QColor(45, 35, 65)
-            elif is_hovered:
-                key_fill = QColor(36, 36, 44)
+            if selected:
+                fill = QColor(40, 36, 50)
+            elif hovered:
+                fill = QColor(34, 34, 40)
             else:
-                key_fill = QColor(26, 26, 32)
+                fill = QColor(28, 28, 34)
+            p.fillPath(kp, fill)
 
-            painter.fillPath(key_path, key_fill)
-
-            # C. Keycap Border
-            if is_selected:
-                border_pen = QPen(QColor(168, 85, 247), 1.8)
-            elif is_hovered:
-                border_pen = QPen(QColor(255, 255, 255, 100), 1.2)
+            # Border
+            if selected:
+                bp = QPen(QColor(180, 120, 255), 1.6)
+            elif hovered:
+                bp = QPen(QColor(255, 255, 255, 80), 1.0)
             else:
-                border_pen = QPen(QColor(r, g, b, 60), 1.0)
+                bp = QPen(QColor(255, 255, 255, 20), 0.6)
+            p.strokePath(kp, bp)
 
-            painter.strokePath(key_path, border_pen)
+            # Legend
+            p.setPen(QPen(QColor(220, 220, 225)))
+            p.drawText(r_rect.adjusted(2, 1, -2, -1), Qt.AlignmentFlag.AlignCenter, k.name)
 
-            # D. Legend Text
-            painter.setPen(QPen(QColor(245, 245, 247)))
-            text_rect = rect.adjusted(3, 2, -3, -2)
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, k.name)
-
-        # 3. Drag Selection Box
+        # Drag box
         if self.drag_start and self.drag_current:
-            drag_rect = QRectF(self.drag_start, self.drag_current).normalized()
-            painter.fillRect(drag_rect, QColor(147, 51, 234, 30))
-            painter.setPen(QPen(QColor(168, 85, 247, 180), 1.0, Qt.PenStyle.DashLine))
-            painter.drawRect(drag_rect)
+            dr = QRectF(self.drag_start, self.drag_current).normalized()
+            p.fillRect(dr, QColor(180, 140, 255, 25))
+            p.setPen(QPen(QColor(180, 140, 255, 140), 1.0, Qt.PenStyle.DashLine))
+            p.drawRect(dr)
 
     def _find_key_at(self, pos: QPointF) -> Optional[KeyInfo]:
-        off_x, off_y, u_w, u_h = self._calculate_geometry()
+        ox, oy, uw, uh = self._calculate_geometry()
         for k in KEYS_87:
-            rect = self._get_key_rect(k, off_x, off_y, u_w, u_h)
-            if rect.contains(pos):
+            if self._key_rect(k, ox, oy, uw, uh).contains(pos):
                 return k
         return None
 
@@ -193,14 +193,13 @@ class KeyboardCanvas(QWidget):
             key = self._find_key_at(event.position())
             if key:
                 if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                    # Multi-select toggle
-                    if key.matrix_idx in self.selected_keys:
-                        self.selected_keys.remove(key.matrix_idx)
+                    if key.name in self.selected_key_names:
+                        self.selected_key_names.remove(key.name)
                     else:
-                        self.selected_keys.add(key.matrix_idx)
+                        self.selected_key_names.add(key.name)
                 else:
-                    # Click to Paint immediately with active paint color!
-                    self.selected_keys = {key.matrix_idx}
+                    self.selected_key_names = {key.name}
+                    # Paint immediately
                     self.set_key_color(key.name, self.active_paint_color)
                 self._emit_selection()
                 self.update()
@@ -208,25 +207,24 @@ class KeyboardCanvas(QWidget):
                 self.drag_start = event.position()
                 self.drag_current = event.position()
                 if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
-                    self.selected_keys.clear()
+                    self.selected_key_names.clear()
                     self._emit_selection()
                 self.update()
 
     def mouseMoveEvent(self, event):
         if self.drag_start:
             self.drag_current = event.position()
-            drag_rect = QRectF(self.drag_start, self.drag_current).normalized()
-            off_x, off_y, u_w, u_h = self._calculate_geometry()
+            dr = QRectF(self.drag_start, self.drag_current).normalized()
+            ox, oy, uw, uh = self._calculate_geometry()
             for k in KEYS_87:
-                k_rect = self._get_key_rect(k, off_x, off_y, u_w, u_h)
-                if drag_rect.intersects(k_rect):
-                    self.selected_keys.add(k.matrix_idx)
+                if dr.intersects(self._key_rect(k, ox, oy, uw, uh)):
+                    self.selected_key_names.add(k.name)
             self._emit_selection()
             self.update()
         else:
-            prev_hover = self.hovered_key
+            prev = self.hovered_key
             self.hovered_key = self._find_key_at(event.position())
-            if prev_hover != self.hovered_key:
+            if prev != self.hovered_key:
                 self.update()
 
     def mouseReleaseEvent(self, event):
