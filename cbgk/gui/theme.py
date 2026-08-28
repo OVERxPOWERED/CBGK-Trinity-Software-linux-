@@ -1,193 +1,186 @@
 """
-Material 3 Design Tokens & Liquid Glassmorphism Styling for CBGK GUI.
-Matches Caelestia / Hyprland / Arch Linux Material You aesthetic.
+Apple / Linear-inspired Minimalist Dark Theme with Electric Violet Accents.
 """
 
-M3_PALETTE = {
-    "primary": "#CB94F7",               # Signature Lavender
-    "on_primary": "#2B114F",
-    "primary_container": "rgba(203, 148, 247, 0.22)",
-    "on_primary_container": "#EADBFF",
-    "secondary": "#CCC2DC",
-    "background": "rgba(16, 14, 22, 0.88)",
-    "surface": "rgba(24, 21, 33, 0.75)",
-    "surface_glass": "rgba(34, 30, 47, 0.65)",
-    "surface_glass_hover": "rgba(50, 44, 69, 0.80)",
-    "surface_glass_active": "rgba(65, 57, 90, 0.90)",
-    "surface_container_high": "rgba(42, 37, 58, 0.80)",
-    "outline": "rgba(255, 255, 255, 0.10)",
-    "outline_bright": "rgba(203, 148, 247, 0.45)",
-    "specular": "rgba(255, 255, 255, 0.18)",
-    "text_primary": "#EDE7F6",
-    "text_secondary": "#B3AABF",
-    "text_muted": "#7E758C",
-    "success": "#7CE38B",
-    "error": "#F2B8B5",
+APPLE_DARK_PALETTE = {
+    "bg_main": "#0D0D11",
+    "bg_sidebar": "#121216",
+    "bg_card": "#17171C",
+    "bg_card_hover": "#1F1F26",
+    "bg_card_selected": "#211A2E",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "border_hover": "rgba(255, 255, 255, 0.16)",
+    "border_active": "#9333EA",
+    "accent_purple": "#9333EA",
+    "accent_purple_light": "#A855F7",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#9CA3AF",
+    "text_muted": "#6B7280",
+    "success": "#10B981",
 }
 
-STYLESHEET = f"""
+APPLE_STYLESHEET = f"""
 QMainWindow {{
-    background-color: {M3_PALETTE['background']};
-    color: {M3_PALETTE['text_primary']};
+    background-color: {APPLE_DARK_PALETTE['bg_main']};
+    color: {APPLE_DARK_PALETTE['text_primary']};
 }}
 
 QWidget {{
-    font-family: 'Inter', 'Roboto', 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', sans-serif;
     font-size: 13px;
-    color: {M3_PALETTE['text_primary']};
+    color: {APPLE_DARK_PALETTE['text_primary']};
 }}
 
-/* Glass Containers / Cards */
-QFrame.glass-card {{
-    background-color: {M3_PALETTE['surface_glass']};
-    border: 1px solid {M3_PALETTE['outline']};
-    border-radius: 16px;
+/* Sidebar Rail */
+QFrame#sidebar_rail {{
+    background-color: {APPLE_DARK_PALETTE['bg_sidebar']};
+    border-right: 1px solid {APPLE_DARK_PALETTE['border']};
 }}
 
-QFrame.glass-card-high {{
-    background-color: {M3_PALETTE['surface_container_high']};
-    border: 1px solid {M3_PALETTE['outline']};
-    border-radius: 16px;
+/* Top Breadcrumb Bar */
+QFrame#top_bar {{
+    background-color: {APPLE_DARK_PALETTE['bg_main']};
+    border-bottom: 1px solid {APPLE_DARK_PALETTE['border']};
 }}
 
-/* Pill Navigation Buttons */
-QPushButton.nav-pill {{
+/* Card Container */
+QFrame.modern-card {{
+    background-color: {APPLE_DARK_PALETTE['bg_card']};
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 12px;
+}}
+
+QFrame.modern-card:hover {{
+    border-color: {APPLE_DARK_PALETTE['border_hover']};
+    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
+}}
+
+/* Selectable Cards (like Reference UI) */
+QFrame.select-card {{
+    background-color: {APPLE_DARK_PALETTE['bg_card']};
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 12px;
+}}
+
+QFrame.select-card:hover {{
+    border-color: {APPLE_DARK_PALETTE['border_hover']};
+    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
+}}
+
+QFrame.select-card[selected="true"] {{
+    border: 1.5px solid {APPLE_DARK_PALETTE['border_active']};
+    background-color: {APPLE_DARK_PALETTE['bg_card_selected']};
+}}
+
+/* Sidebar Icon Buttons */
+QPushButton.sidebar-btn {{
     background-color: transparent;
-    color: {M3_PALETTE['text_secondary']};
     border: none;
-    border-radius: 20px;
-    padding: 8px 20px;
-    font-size: 13px;
-    font-weight: 600;
-}}
-
-QPushButton.nav-pill:hover {{
-    background-color: {M3_PALETTE['surface_glass_hover']};
-    color: {M3_PALETTE['text_primary']};
-}}
-
-QPushButton.nav-pill:checked {{
-    background-color: {M3_PALETTE['primary_container']};
-    color: {M3_PALETTE['primary']};
-    border: 1px solid {M3_PALETTE['outline_bright']};
-}}
-
-/* Action Buttons */
-QPushButton.action-primary {{
-    background-color: {M3_PALETTE['primary']};
-    color: {M3_PALETTE['on_primary']};
-    border: none;
-    border-radius: 12px;
-    padding: 10px 24px;
-    font-size: 13px;
-    font-weight: 700;
-}}
-
-QPushButton.action-primary:hover {{
-    background-color: #DAB3FA;
-}}
-
-QPushButton.action-primary:pressed {{
-    background-color: #B774EB;
-}}
-
-QPushButton.action-secondary {{
-    background-color: {M3_PALETTE['surface_glass']};
-    color: {M3_PALETTE['text_primary']};
-    border: 1px solid {M3_PALETTE['outline']};
-    border-radius: 12px;
-    padding: 10px 20px;
-    font-weight: 600;
-}}
-
-QPushButton.action-secondary:hover {{
-    background-color: {M3_PALETTE['surface_glass_hover']};
-    border-color: {M3_PALETTE['outline_bright']};
-}}
-
-/* Combo Box */
-QComboBox {{
-    background-color: {M3_PALETTE['surface_glass']};
-    border: 1px solid {M3_PALETTE['outline']};
     border-radius: 10px;
-    padding: 8px 14px;
-    color: {M3_PALETTE['text_primary']};
+    padding: 10px;
+}}
+
+QPushButton.sidebar-btn:hover {{
+    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
+}}
+
+QPushButton.sidebar-btn:checked {{
+    background-color: rgba(147, 51, 234, 0.20);
+    border: 1px solid rgba(168, 85, 247, 0.40);
+}}
+
+/* Primary Apple Action Button (Purple Pill) */
+QPushButton.btn-primary {{
+    background-color: {APPLE_DARK_PALETTE['accent_purple']};
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+}}
+
+QPushButton.btn-primary:hover {{
+    background-color: {APPLE_DARK_PALETTE['accent_purple_light']};
+}}
+
+QPushButton.btn-primary:pressed {{
+    background-color: #7E22CE;
+}}
+
+/* Ghost / Secondary Button */
+QPushButton.btn-ghost {{
+    background-color: transparent;
+    color: {APPLE_DARK_PALETTE['text_secondary']};
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 8px;
+    padding: 8px 16px;
     font-weight: 500;
 }}
 
-QComboBox:hover {{
-    border-color: {M3_PALETTE['outline_bright']};
+QPushButton.btn-ghost:hover {{
+    background-color: {APPLE_DARK_PALETTE['bg_card_hover']};
+    color: #FFFFFF;
+    border-color: {APPLE_DARK_PALETTE['border_hover']};
 }}
 
-QComboBox::drop-down {{
-    border: none;
-    padding-right: 10px;
-}}
-
-QComboBox QAbstractItemView {{
-    background-color: #1E1B29;
-    border: 1px solid {M3_PALETTE['outline']};
-    border-radius: 10px;
-    selection-background-color: {M3_PALETTE['primary_container']};
-    selection-color: {M3_PALETTE['primary']};
-    padding: 4px;
-}}
-
-/* Sliders */
+/* Apple-style Slider */
 QSlider::groove:horizontal {{
-    height: 8px;
-    background: {M3_PALETTE['surface_glass']};
-    border-radius: 4px;
-    border: 1px solid {M3_PALETTE['outline']};
+    height: 4px;
+    background: #27272A;
+    border-radius: 2px;
 }}
 
 QSlider::sub-page:horizontal {{
-    background: {M3_PALETTE['primary']};
-    border-radius: 4px;
+    background: {APPLE_DARK_PALETTE['accent_purple']};
+    border-radius: 2px;
 }}
 
 QSlider::handle:horizontal {{
     background: #FFFFFF;
-    border: 2px solid {M3_PALETTE['primary']};
-    width: 18px;
-    height: 18px;
-    margin: -5px 0;
-    border-radius: 9px;
+    width: 16px;
+    height: 16px;
+    margin: -6px 0;
+    border-radius: 8px;
 }}
 
 QSlider::handle:horizontal:hover {{
-    background: {M3_PALETTE['primary']};
-    border-color: #FFFFFF;
+    background: #E4E4E7;
 }}
 
-/* Line Edit */
+/* Minimalist Inputs */
 QLineEdit {{
-    background-color: {M3_PALETTE['surface_glass']};
-    border: 1px solid {M3_PALETTE['outline']};
-    border-radius: 10px;
-    padding: 8px 14px;
-    color: {M3_PALETTE['text_primary']};
+    background-color: #121216;
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #FFFFFF;
 }}
 
 QLineEdit:focus {{
-    border: 1px solid {M3_PALETTE['primary']};
+    border-color: {APPLE_DARK_PALETTE['accent_purple']};
 }}
 
-/* ScrollBar */
-QScrollBar:vertical {{
+/* Minimalist Combo */
+QComboBox {{
+    background-color: #121216;
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #FFFFFF;
+}}
+
+QComboBox::drop-down {{
     border: none;
-    background: transparent;
-    width: 8px;
-    margin: 0px;
+    padding-right: 8px;
 }}
 
-QScrollBar::handle:vertical {{
-    background: {M3_PALETTE['surface_glass_hover']};
-    min-height: 20px;
-    border-radius: 4px;
-}}
-
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-    height: 0px;
+QComboBox QAbstractItemView {{
+    background-color: #121216;
+    border: 1px solid {APPLE_DARK_PALETTE['border']};
+    border-radius: 8px;
+    selection-background-color: rgba(147, 51, 234, 0.3);
+    color: #FFFFFF;
+    padding: 4px;
 }}
 """

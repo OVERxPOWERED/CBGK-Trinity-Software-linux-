@@ -1,5 +1,5 @@
 """
-Interactive Vector-rendered 87-Key Mechanical Keyboard Canvas with Backlit LED Shaders.
+Interactive Mechanical Keyboard Canvas with Click-to-Paint and LED Glow Shaders.
 """
 
 from typing import Dict, List, Set, Optional, Tuple
@@ -16,15 +16,17 @@ class KeyboardCanvas(QWidget):
     """Interactive Graphical 87-Key Mechanical Keyboard Widget."""
 
     selectionChanged = pyqtSignal(list) # Emits list of selected KeyInfo objects
-    keyClicked = pyqtSignal(object)      # Emits KeyInfo on click
+    keyColorChanged = pyqtSignal(str, str) # Emits (key_name, hex_color)
+    keyboardChanged = pyqtSignal()      # Emits on any change
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(820, 290)
+        self.setMinimumSize(800, 270)
         self.setMouseTracking(True)
 
         # Color mapping: Key name -> Hex color string
         self.key_colors: Dict[str, str] = {k.name: "#CB94F7" for k in KEYS_87}
+        self.active_paint_color = "#CB94F7"
 
         # Selection state
         self.selected_keys: Set[int] = set() # Set of key matrix indices
@@ -34,15 +36,22 @@ class KeyboardCanvas(QWidget):
         self.drag_start: Optional[QPointF] = None
         self.drag_current: Optional[QPointF] = None
 
-    def set_key_color(self, key_name: str, color_hex: str):
+    def set_active_paint_color(self, color_hex: str):
+        self.active_paint_color = color_hex
+
+    def set_key_color(self, key_name: str, color_hex: str, notify=True):
         """Sets the LED color for a specific key."""
         self.key_colors[key_name] = color_hex
+        if notify:
+            self.keyColorChanged.emit(key_name, color_hex)
+            self.keyboardChanged.emit()
         self.update()
 
     def set_all_colors(self, color_hex: str):
         """Sets all keys to a uniform color."""
         for k in KEYS_87:
             self.key_colors[k.name] = color_hex
+        self.keyboardChanged.emit()
         self.update()
 
     def set_color_map(self, color_map: Dict[str, str]):
@@ -79,13 +88,11 @@ class KeyboardCanvas(QWidget):
         self.selectionChanged.emit(selected)
 
     def _calculate_geometry(self) -> Tuple[float, float, float, float]:
-        """Calculates scaling factors based on widget dimensions."""
-        pad_x = 24.0
-        pad_y = 20.0
+        pad_x = 16.0
+        pad_y = 14.0
         avail_w = self.width() - (pad_x * 2)
         avail_h = self.height() - (pad_y * 2)
 
-        # 87-key TKL grid is roughly 18.5 units wide and 6.4 units tall
         unit_w = avail_w / 18.5
         unit_h = avail_h / 6.4
         unit_size = min(unit_w, unit_h)
@@ -96,7 +103,7 @@ class KeyboardCanvas(QWidget):
         return offset_x, offset_y, unit_size, unit_size
 
     def _get_key_rect(self, k: KeyInfo, off_x: float, off_y: float, u_w: float, u_h: float) -> QRectF:
-        gap = 4.0
+        gap = 3.5
         x = off_x + (k.x * u_w) + (gap / 2)
         y = off_y + (k.y * u_h) + (gap / 2)
         w = (k.width * u_w) - gap
@@ -110,80 +117,67 @@ class KeyboardCanvas(QWidget):
 
         off_x, off_y, u_w, u_h = self._calculate_geometry()
 
-        # 1. Draw Keyboard Outer Case (Liquid Glass Chassis)
-        case_rect = QRectF(off_x - 12, off_y - 12, (18.5 * u_w) + 24, (6.4 * u_h) + 24)
+        # 1. Outer Chassis (Matte Black with subtle edge)
+        case_rect = QRectF(off_x - 10, off_y - 10, (18.5 * u_w) + 20, (6.4 * u_h) + 20)
         case_path = QPainterPath()
-        case_path.addRoundedRect(case_rect, 18, 18)
+        case_path.addRoundedRect(case_rect, 12, 12)
 
-        # Case Background gradient
-        case_grad = QLinearGradient(case_rect.topLeft(), case_rect.bottomLeft())
-        case_grad.setColorAt(0.0, QColor(26, 23, 36, 210))
-        case_grad.setColorAt(1.0, QColor(14, 12, 20, 240))
-        painter.fillPath(case_path, case_grad)
+        painter.fillPath(case_path, QColor(18, 18, 22))
+        painter.strokePath(case_path, QPen(QColor(255, 255, 255, 18), 1.0))
 
-        # Case Specular Edge
-        case_pen = QPen(QColor(255, 255, 255, 30), 1.5)
-        painter.strokePath(case_path, case_pen)
-
-        # 2. Draw Keys and Backlight LEDs
-        font_main = QFont("Inter", int(u_h * 0.22), QFont.Weight.DemiBold)
+        # 2. Keycaps & LED Lighting
+        font_main = QFont("-apple-system", int(u_h * 0.22), QFont.Weight.DemiBold)
         painter.setFont(font_main)
 
         for k in KEYS_87:
             rect = self._get_key_rect(k, off_x, off_y, u_w, u_h)
             color_hex = self.key_colors.get(k.name, "#CB94F7")
             r, g, b = hex_to_rgb(color_hex)
-            led_color = QColor(r, g, b)
 
             is_selected = k.matrix_idx in self.selected_keys
             is_hovered = self.hovered_key and self.hovered_key.matrix_idx == k.matrix_idx
 
-            # A. Draw Under-Key LED Glow Halo
-            glow_rect = rect.adjusted(-6, -6, 6, 6)
-            glow_grad = QRadialGradient(rect.center(), rect.width() * 0.85)
-            glow_grad.setColorAt(0.0, QColor(r, g, b, 140))
-            glow_grad.setColorAt(0.5, QColor(r, g, b, 50))
+            # A. LED Underglow Halo
+            glow_rect = rect.adjusted(-5, -5, 5, 5)
+            glow_grad = QRadialGradient(rect.center(), rect.width() * 0.8)
+            glow_grad.setColorAt(0.0, QColor(r, g, b, 120))
+            glow_grad.setColorAt(0.6, QColor(r, g, b, 30))
             glow_grad.setColorAt(1.0, QColor(r, g, b, 0))
             painter.fillRect(glow_rect, QBrush(glow_grad))
 
-            # B. Draw Keycap Body
+            # B. Keycap Body
             key_path = QPainterPath()
-            key_path.addRoundedRect(rect, 6, 6)
+            key_path.addRoundedRect(rect, 5, 5)
 
-            # Keycap surface fill
             if is_selected:
-                key_fill = QColor(60, 48, 85, 240)
+                key_fill = QColor(45, 35, 65)
             elif is_hovered:
-                key_fill = QColor(48, 42, 65, 230)
+                key_fill = QColor(36, 36, 44)
             else:
-                key_fill = QColor(32, 28, 44, 220)
+                key_fill = QColor(26, 26, 32)
 
             painter.fillPath(key_path, key_fill)
 
-            # C. Keycap Border / LED Accent
+            # C. Keycap Border
             if is_selected:
-                border_pen = QPen(QColor(203, 148, 247, 255), 2.0)
+                border_pen = QPen(QColor(168, 85, 247), 1.8)
             elif is_hovered:
-                border_pen = QPen(QColor(255, 255, 255, 120), 1.5)
+                border_pen = QPen(QColor(255, 255, 255, 100), 1.2)
             else:
-                border_pen = QPen(QColor(r, g, b, 70), 1.0)
+                border_pen = QPen(QColor(r, g, b, 60), 1.0)
 
             painter.strokePath(key_path, border_pen)
 
-            # D. Keycap Specular Top Highlight
-            top_line = QRectF(rect.x() + 4, rect.y() + 1, rect.width() - 8, 1)
-            painter.fillRect(top_line, QColor(255, 255, 255, 45))
-
-            # E. Draw Legend Text with Glowing LED Tint
-            painter.setPen(QPen(QColor(240, 235, 250, 230)))
-            text_rect = rect.adjusted(4, 2, -4, -2)
+            # D. Legend Text
+            painter.setPen(QPen(QColor(245, 245, 247)))
+            text_rect = rect.adjusted(3, 2, -3, -2)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, k.name)
 
-        # 3. Draw Drag Selection Box
+        # 3. Drag Selection Box
         if self.drag_start and self.drag_current:
             drag_rect = QRectF(self.drag_start, self.drag_current).normalized()
-            painter.fillRect(drag_rect, QColor(203, 148, 247, 40))
-            painter.setPen(QPen(QColor(203, 148, 247, 180), 1.0, Qt.PenStyle.DashLine))
+            painter.fillRect(drag_rect, QColor(147, 51, 234, 30))
+            painter.setPen(QPen(QColor(168, 85, 247, 180), 1.0, Qt.PenStyle.DashLine))
             painter.drawRect(drag_rect)
 
     def _find_key_at(self, pos: QPointF) -> Optional[KeyInfo]:
@@ -199,19 +193,18 @@ class KeyboardCanvas(QWidget):
             key = self._find_key_at(event.position())
             if key:
                 if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                    # Toggle single key in multi-selection
+                    # Multi-select toggle
                     if key.matrix_idx in self.selected_keys:
                         self.selected_keys.remove(key.matrix_idx)
                     else:
                         self.selected_keys.add(key.matrix_idx)
                 else:
-                    # Select single key
+                    # Click to Paint immediately with active paint color!
                     self.selected_keys = {key.matrix_idx}
-                self.keyClicked.emit(key)
+                    self.set_key_color(key.name, self.active_paint_color)
                 self._emit_selection()
                 self.update()
             else:
-                # Start drag selection
                 self.drag_start = event.position()
                 self.drag_current = event.position()
                 if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
