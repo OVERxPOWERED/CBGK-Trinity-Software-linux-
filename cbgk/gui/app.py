@@ -1,715 +1,512 @@
 """
-LuminKey / Apple Monochrome Liquid Glass Desktop Interface for Cosmic Byte Trinity.
+Cosmic Byte Trinity — Clean White Desktop Control Center.
+Layout matches the reference screenshot exactly.
 """
 
-import sys
-import os
-import time
-import subprocess
+import sys, os, time, subprocess
 from typing import Dict, List, Optional
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QLabel, QPushButton, QComboBox, QSlider, QLineEdit,
-    QStackedWidget, QFrame, QColorDialog, QScrollArea, QMessageBox,
-    QButtonGroup, QSizePolicy, QInputDialog
+    QGridLayout, QLabel, QPushButton, QComboBox, QSlider,
+    QStackedWidget, QFrame, QColorDialog, QScrollArea,
+    QButtonGroup, QInputDialog,
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QColor, QIcon, QFont, QPixmap
 
-from .theme import LUMINKEY_STYLESHEET, LUMINKEY_PALETTE
+from .theme import STYLESHEET, PALETTE
 from .icons import create_brand_logo, create_glyph
 from .keyboard_canvas import KeyboardCanvas
 from .async_worker import AsyncHardwareWorker
-from ..matrix import KEYS_87, LIGHTING_MODES, hex_to_rgb, rgb_to_hex
+from ..matrix import KEYS_87, LIGHTING_MODES, hex_to_rgb
 from ..device import Device, DeviceError
 from ..profiles import ProfileManager
 from ..daemon import send_ipc_command
 
-QUICK_COLORS = [
-    ("#CB94F7", "Lavender"),
-    ("#FFFFFF", "White"),
-    ("#00FFFF", "Cyan"),
-    ("#FF007F", "Neon Pink"),
-    ("#00FF66", "Emerald"),
-    ("#FF3366", "Crimson"),
-    ("#FFB800", "Amber"),
+COLOR_DOTS = [
+    "#FF3B30", "#FF9500", "#FFCC00", "#34C759",
+    "#00C7BE", "#007AFF", "#AF52DE", "#CB94F7",
 ]
 
 
 class MainWindow(QMainWindow):
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Cosmic Byte Trinity")
-        self.resize(1120, 780)
-        self.setMinimumSize(980, 700)
-        self.setStyleSheet(LUMINKEY_STYLESHEET)
+        self.resize(1080, 740)
+        self.setMinimumSize(960, 660)
+        self.setStyleSheet(STYLESHEET)
 
-        self.profile_mgr = ProfileManager()
-        self.active_color = "#CB94F7"
-        self.active_mode = "custom"
+        self.pmgr = ProfileManager()
+        self.color = "#FFFFFF"
+        self.mode = "custom"
         self.speed = 3
         self.brightness = 4
 
         self.worker = AsyncHardwareWorker()
         self.worker.start()
+        self._boot_daemon()
 
-        self._ensure_daemon()
-        self._init_ui()
-        self._load_initial_profile()
+        self._build()
+        self._load_profile()
 
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self._poll_status)
-        self.status_timer.start(4000)
+        self._tick = QTimer(self)
+        self._tick.timeout.connect(self._poll)
+        self._tick.start(4000)
 
-    # ------------------------------------------------------------------
-    # Daemon lifecycle
-    # ------------------------------------------------------------------
-    def _ensure_daemon(self):
-        try:
-            send_ipc_command("ping")
+    def _boot_daemon(self):
+        try: send_ipc_command("ping")
         except Exception:
             root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             subprocess.Popen(
-                [sys.executable, "-m", "cbgk.daemon"],
-                cwd=root,
+                [sys.executable, "-m", "cbgk.daemon"], cwd=root,
                 env=dict(os.environ, PYTHONPATH=root),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, start_new_session=True)
             time.sleep(0.3)
 
-    # ------------------------------------------------------------------
-    # UI Assembly
-    # ------------------------------------------------------------------
-    def _init_ui(self):
-        central = QWidget(self)
-        self.setCentralWidget(central)
-        root = QHBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+    # ----------------------------------------------------------------
+    # Helpers
+    # ----------------------------------------------------------------
+    @staticmethod
+    def _lbl(text, sz=13, bold=False, color=None):
+        l = QLabel(text)
+        w = QFont.Weight.Bold if bold else QFont.Weight.Normal
+        l.setFont(QFont("Inter", sz, w))
+        if color: l.setStyleSheet(f"color: {color};")
+        return l
 
-        # -------- Left Sidebar --------
-        sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(200)
-        sl = QVBoxLayout(sidebar)
-        sl.setContentsMargins(16, 16, 16, 16)
-        sl.setSpacing(12)
+    def _card(self):
+        f = QFrame(); f.setProperty("class", "info-card"); return f
 
-        # Traffic lights
-        tl = QHBoxLayout()
-        tl.setSpacing(8)
-        for c in ("#FF5F56", "#FFBD2E", "#27C93F"):
-            d = QLabel()
-            d.setFixedSize(12, 12)
-            d.setStyleSheet(f"background-color: {c}; border-radius: 6px;")
-            tl.addWidget(d)
-        tl.addStretch(1)
-        sl.addLayout(tl)
+    # ----------------------------------------------------------------
+    # Build
+    # ----------------------------------------------------------------
+    def _build(self):
+        cw = QWidget(self); self.setCentralWidget(cw)
+        root = QHBoxLayout(cw); root.setContentsMargins(0,0,0,0); root.setSpacing(0)
 
-        sl.addSpacing(4)
+        # ---- SIDEBAR ----
+        sb = QFrame(); sb.setObjectName("sidebar"); sb.setFixedWidth(210)
+        sl = QVBoxLayout(sb); sl.setContentsMargins(16,20,16,16); sl.setSpacing(10)
 
         # Brand
-        br = QHBoxLayout()
-        br.setSpacing(8)
-        logo = QLabel()
-        logo.setPixmap(create_brand_logo(22))
-        br.addWidget(logo)
-        bl = QLabel("TRINITY 87K")
-        bl.setFont(QFont("Inter", 11, QFont.Weight.Bold))
-        bl.setStyleSheet("color: #FFFFFF; letter-spacing: 1px;")
-        br.addWidget(bl)
-        br.addStretch(1)
+        br = QHBoxLayout(); br.setSpacing(8)
+        bl = QLabel("COSMIC BYTE"); bl.setFont(QFont("Inter", 10, QFont.Weight.Bold))
+        bl.setStyleSheet("color: #1D1D1F; letter-spacing: 1.5px;")
+        sep = QLabel("|"); sep.setStyleSheet("color: #AEAEB2;")
+        bt = QLabel("TRINITY"); bt.setFont(QFont("Inter", 10, QFont.Weight.Medium))
+        bt.setStyleSheet("color: #6E6E73; letter-spacing: 1px;")
+        br.addWidget(bl); br.addWidget(sep); br.addWidget(bt); br.addStretch(1)
         sl.addLayout(br)
+        sl.addSpacing(16)
 
-        sl.addSpacing(8)
-
-        # Nav pills
-        self.nav_group = QButtonGroup(self)
-        self.nav_group.setExclusive(True)
-        nav = [
-            ("overview", "Overview", 0),
-            ("lighting", "Lighting", 1),
-            ("keymap", "Keymap", 2),
-            ("macros", "Macros", 3),
-            ("performance", "Performance", 4),
-            ("settings", "Settings", 5),
-        ]
-        for ico, title, idx in nav:
+        # Nav
+        self.nav_grp = QButtonGroup(self); self.nav_grp.setExclusive(True)
+        for ico, title, idx in [
+            ("overview","Overview",0), ("keymap","Keymap",1), ("lighting","Lighting",2),
+            ("macros","Macros",3), ("performance","Performance",4), ("settings","Settings",5),
+        ]:
             b = QPushButton(f"  {title}")
-            b.setProperty("class", "luminkey-nav")
-            b.setIcon(create_glyph(ico, 16))
-            b.setIconSize(QSize(16, 16))
+            b.setProperty("class", "nav-btn")
+            b.setIcon(create_glyph(ico, 16, "#6E6E73"))
+            b.setIconSize(QSize(16,16))
             b.setCheckable(True)
-            if idx == 0:
-                b.setChecked(True)
-            b.clicked.connect(lambda _, i=idx: self.pages.setCurrentIndex(i))
-            self.nav_group.addButton(b, idx)
+            if idx==0: b.setChecked(True)
+            b.clicked.connect(lambda _,i=idx: self.pages.setCurrentIndex(i))
+            self.nav_grp.addButton(b, idx)
             sl.addWidget(b)
 
         sl.addStretch(1)
 
-        # Device card
-        dc = QFrame()
-        dc.setStyleSheet(
-            "background-color: rgba(255,255,255,0.04);"
-            "border: 1px solid rgba(255,255,255,0.07);"
-            "border-radius: 12px; padding: 10px;"
-        )
-        dcl = QVBoxLayout(dc)
-        dcl.setContentsMargins(10, 8, 10, 8)
-        dcl.setSpacing(4)
-        dcl.addWidget(self._lbl("Trinity 87K TKL", 10, bold=True))
-        sr = QHBoxLayout()
-        sr.setSpacing(6)
-        self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet("color: #27C93F; font-size: 10px;")
-        self.status_text = QLabel("Connected")
-        self.status_text.setStyleSheet("color: #9E9EA7; font-size: 10px;")
-        sr.addWidget(self.status_dot)
-        sr.addWidget(self.status_text)
-        sr.addStretch(1)
-        dcl.addLayout(sr)
-        dcl.addWidget(self._lbl("FW 1.2.0", 8, color="#5C5C64"))
-        sl.addWidget(dc)
+        # Bottom: theme toggle + version
+        btm = QHBoxLayout(); btm.setSpacing(8)
+        for ico_n in ["lighting","settings"]:
+            ib = QPushButton()
+            ib.setFixedSize(36,36)
+            ib.setIcon(create_glyph(ico_n, 16, "#AEAEB2"))
+            ib.setIconSize(QSize(16,16))
+            ib.setStyleSheet("border: 1px solid #E8E8ED; border-radius: 10px; background: #FAFAFC;")
+            btm.addWidget(ib)
+        btm.addStretch(1)
+        sl.addLayout(btm)
 
-        root.addWidget(sidebar)
+        vbox = QFrame()
+        vbox.setStyleSheet("background-color: #F0F0F5; border-radius: 12px; padding: 10px;")
+        vl = QHBoxLayout(vbox); vl.setContentsMargins(12,8,12,8)
+        vi = QVBoxLayout()
+        vi.addWidget(self._lbl("v1.2.0", 9, bold=True, color="#1D1D1F"))
+        vi.addWidget(self._lbl("Check for updates", 9, color="#6E6E73"))
+        vl.addLayout(vi); vl.addStretch(1)
+        sl.addWidget(vbox)
 
-        # -------- Main Content --------
+        root.addWidget(sb)
+
+        # ---- MAIN CONTENT ----
         main = QWidget()
-        ml = QVBoxLayout(main)
-        ml.setContentsMargins(28, 18, 28, 18)
-        ml.setSpacing(14)
+        ml = QVBoxLayout(main); ml.setContentsMargins(28,20,28,20); ml.setSpacing(14)
 
-        # Header
-        hdr = QHBoxLayout()
-        hdr.setSpacing(12)
-        gl = QVBoxLayout()
-        gl.setSpacing(2)
-        self.greet = QLabel("Good evening.")
-        self.greet.setFont(QFont("Inter", 18, QFont.Weight.Bold))
-        self.greet.setStyleSheet("color: #FFFFFF;")
-        self.sub_greet = QLabel("Your Trinity 87K is ready to go.")
-        self.sub_greet.setFont(QFont("Inter", 11))
-        self.sub_greet.setStyleSheet("color: #8E8E93;")
-        gl.addWidget(self.greet)
-        gl.addWidget(self.sub_greet)
-        hdr.addLayout(gl)
+        # Header row
+        hdr = QHBoxLayout(); hdr.setSpacing(10)
+        hl = QVBoxLayout(); hl.setSpacing(2)
+        hl.addWidget(self._lbl("Cosmic Byte Trinity", 20, bold=True, color="#1D1D1F"))
+        sr = QHBoxLayout(); sr.setSpacing(6)
+        self.dot = QLabel("●"); self.dot.setStyleSheet("color: #34C759; font-size: 12px;")
+        self.conn_lbl = QLabel("Connected"); self.conn_lbl.setStyleSheet("color: #34C759; font-size: 12px;")
+        sr.addWidget(self.dot); sr.addWidget(self.conn_lbl); sr.addStretch(1)
+        hl.addLayout(sr)
+        hdr.addLayout(hl)
         hdr.addStretch(1)
 
-        self.profile_combo = QComboBox()
-        self.profile_combo.setFixedWidth(150)
-        self._populate_profiles()
-        self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
-        hdr.addWidget(self.profile_combo)
-
-        btn_save = QPushButton("Save")
-        btn_save.setProperty("class", "btn-ghost")
-        btn_save.clicked.connect(self._save_profile)
-        hdr.addWidget(btn_save)
-
-        btn_apply = QPushButton("Apply")
-        btn_apply.setProperty("class", "btn-primary")
-        btn_apply.clicked.connect(self._apply_to_keyboard)
-        hdr.addWidget(btn_apply)
+        # Profile combo
+        self.prof_combo = QComboBox(); self.prof_combo.setFixedWidth(140)
+        self._fill_profiles()
+        self.prof_combo.currentIndexChanged.connect(self._on_profile)
+        hdr.addWidget(self.prof_combo)
+        b_plus = QPushButton(); b_plus.setFixedSize(34,34)
+        b_plus.setIcon(create_glyph("plus", 14, "#6E6E73")); b_plus.setIconSize(QSize(14,14))
+        b_plus.setProperty("class", "btn-ghost"); b_plus.clicked.connect(self._save_profile)
+        hdr.addWidget(b_plus)
+        b_dots = QPushButton(); b_dots.setFixedSize(34,34)
+        b_dots.setIcon(create_glyph("dots", 14, "#6E6E73")); b_dots.setIconSize(QSize(14,14))
+        b_dots.setProperty("class", "btn-ghost")
+        hdr.addWidget(b_dots)
 
         ml.addLayout(hdr)
 
-        # Pages
+        # Stacked pages
         self.pages = QStackedWidget()
-        self.pages.addWidget(self._page_overview())
-        self.pages.addWidget(self._page_lighting())
-        self.pages.addWidget(self._page_keymap())
-        self.pages.addWidget(self._page_macros())
-        self.pages.addWidget(self._page_performance())
-        self.pages.addWidget(self._page_settings())
+        self.pages.addWidget(self._pg_overview())
+        self.pages.addWidget(self._pg_stub("Keymap", "Assign custom key actions and swap modifiers."))
+        self.pages.addWidget(self._pg_lighting())
+        self.pages.addWidget(self._pg_stub("Macros", "Record and assign multi-key macro sequences."))
+        self.pages.addWidget(self._pg_performance())
+        self.pages.addWidget(self._pg_settings())
         ml.addWidget(self.pages, 1)
+
+        # Bottom-right: Save to Device
+        bbar = QHBoxLayout(); bbar.addStretch(1)
+        self.btn_save_dev = QPushButton("  Save to Device")
+        self.btn_save_dev.setProperty("class", "btn-save")
+        self.btn_save_dev.setIcon(create_glyph("check", 16, "#FFFFFF"))
+        self.btn_save_dev.setIconSize(QSize(16,16))
+        self.btn_save_dev.clicked.connect(self._apply)
+        bbar.addWidget(self.btn_save_dev)
+        ml.addLayout(bbar)
 
         root.addWidget(main, 1)
 
-    # ------------------------------------------------------------------
-    # Helper
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _lbl(text, size=11, bold=False, color="#FFFFFF"):
-        l = QLabel(text)
-        w = QFont.Weight.Bold if bold else QFont.Weight.Normal
-        l.setFont(QFont("Inter", size, w))
-        l.setStyleSheet(f"color: {color};")
-        return l
+    # ----------------------------------------------------------------
+    # Page: Overview
+    # ----------------------------------------------------------------
+    def _pg_overview(self):
+        pg = QWidget()
+        lay = QVBoxLayout(pg); lay.setContentsMargins(0,0,0,0); lay.setSpacing(14)
 
-    def _section(self, title):
-        l = QLabel(title)
-        l.setFont(QFont("Inter", 9, QFont.Weight.Bold))
-        l.setStyleSheet("color: #5C5C64; letter-spacing: 1px;")
-        return l
-
-    def _card(self):
-        f = QFrame()
-        f.setProperty("class", "glass-card")
-        return f
-
-    # ------------------------------------------------------------------
-    # Page 0 — Overview (keyboard showcase + 3 info cards)
-    # ------------------------------------------------------------------
-    def _page_overview(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(14)
-
-        # Canvas (instantiate here — shared across app)
+        # Canvas
         self.canvas = KeyboardCanvas()
-        self.canvas.set_active_paint_color(self.active_color)
-        self.canvas.keyboardChanged.connect(self._on_canvas_changed)
+        self.canvas.set_active_paint_color(self.color)
+        self.canvas.keyboardChanged.connect(self._on_canvas)
 
-        # Showcase panel
-        show = QFrame()
-        show.setProperty("class", "glass-panel")
-        sl = QVBoxLayout(show)
-        sl.setContentsMargins(20, 14, 20, 14)
-        sl.setSpacing(6)
+        # Showcase panel (white card with dark keyboard inside)
+        show = QFrame(); show.setProperty("class", "showcase-panel")
+        shl = QVBoxLayout(show); shl.setContentsMargins(0,0,0,0); shl.setSpacing(0)
+        shl.addWidget(self.canvas, 1)
 
-        # Top bar inside showcase
-        tb = QHBoxLayout()
-        tb.setSpacing(8)
-        tb.addWidget(self._section("KEYBOARD MATRIX"))
-        for cid, cn in [("all", "All"), ("wasd", "WASD"), ("arrows", "Arrows"), ("function", "F-Row"), ("mods", "Mods")]:
-            b = QPushButton(cn)
-            b.setProperty("class", "btn-ghost")
-            b.setFixedHeight(24)
-            b.setFont(QFont("Inter", 9))
-            b.clicked.connect(lambda _, c=cid: self.canvas.select_keys_by_category(c))
-            tb.addWidget(b)
-        bc = QPushButton("Clear")
-        bc.setProperty("class", "btn-ghost")
-        bc.setFixedHeight(24)
-        bc.setFont(QFont("Inter", 9))
-        bc.clicked.connect(self.canvas.clear_selection)
-        tb.addWidget(bc)
-        tb.addStretch(1)
-        # Color palette chips
-        for h, nm in QUICK_COLORS:
-            ch = QPushButton()
-            ch.setFixedSize(18, 18)
-            ch.setToolTip(nm)
-            ch.setStyleSheet(
-                f"background-color: {h}; border: 1px solid rgba(255,255,255,0.25);"
-                f"border-radius: 9px;"
-            )
-            ch.clicked.connect(lambda _, c=h: self._quick_paint(c))
-            tb.addWidget(ch)
-        bp = QPushButton("Pick")
-        bp.setProperty("class", "btn-ghost")
-        bp.setFixedHeight(24)
-        bp.setFont(QFont("Inter", 9))
-        bp.clicked.connect(self._pick_color)
-        tb.addWidget(bp)
-
-        sl.addLayout(tb)
-        sl.addWidget(self.canvas, 1)
-
-        # Footer
-        ft = QHBoxLayout()
-        ft.addWidget(self._lbl("Layout   ANSI 87-Key TKL", 9, color="#5C5C64"))
+        # Footer specs row
+        ft = QHBoxLayout(); ft.setContentsMargins(20,6,20,10); ft.setSpacing(20)
+        ft.addWidget(self._lbl("Layout", 10, color="#AEAEB2"))
+        ft.addWidget(self._lbl("ANSI (US)", 10, bold=True, color="#1D1D1F"))
         ft.addStretch(1)
-        ft.addWidget(self._lbl("Polling Rate   1000 Hz", 9, color="#5C5C64"))
-        sl.addLayout(ft)
+        ft.addWidget(self._lbl("Polling Rate", 10, color="#AEAEB2"))
+        ft.addWidget(self._lbl("1000 Hz", 10, bold=True, color="#1D1D1F"))
+        shl.addLayout(ft)
 
         lay.addWidget(show, 1)
 
-        # Bottom cards row
-        cr = QHBoxLayout()
-        cr.setSpacing(14)
+        # 3 bottom cards
+        cr = QHBoxLayout(); cr.setSpacing(14)
 
-        # Card 1 — mode + color
+        # Card 1: Lighting
         c1 = self._card()
-        c1l = QVBoxLayout(c1)
-        c1l.setContentsMargins(16, 14, 16, 14)
-        c1l.setSpacing(6)
-        c1l.addWidget(self._lbl("Lighting Effect", 11, bold=True))
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Per-Key Custom RGB", "custom")
+        c1l = QVBoxLayout(c1); c1l.setContentsMargins(18,16,18,16); c1l.setSpacing(8)
+        # Title with icon
+        t1 = QHBoxLayout(); t1.setSpacing(6)
+        t1.addWidget(QLabel()); t1.itemAt(0).widget().setPixmap(create_glyph("lighting",14,"#6E6E73").pixmap(14,14))
+        t1.addWidget(self._lbl("Lighting", 12, bold=True)); t1.addStretch(1)
+        c1l.addLayout(t1)
+
+        # Effect row
+        er = QHBoxLayout()
+        er.addWidget(self._lbl("Effect", 11, color="#6E6E73"))
+        er.addStretch(1)
+        self.mode_combo = QComboBox(); self.mode_combo.setFixedWidth(120)
+        self.mode_combo.addItem("Custom RGB", "custom")
         for mn in LIGHTING_MODES:
-            if mn != "custom":
-                self.mode_combo.addItem(mn.replace("_", " ").title(), mn)
-        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        c1l.addWidget(self.mode_combo)
+            if mn != "custom": self.mode_combo.addItem(mn.replace("_"," ").title(), mn)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode)
+        er.addWidget(self.mode_combo)
+        c1l.addLayout(er)
+
+        # Brightness
+        bbr = QHBoxLayout()
+        bbr.addWidget(self._lbl("Brightness", 11, color="#6E6E73"))
+        bbr.addStretch(1)
+        self.bri_lbl = QLabel("100%"); self.bri_lbl.setStyleSheet("color: #1D1D1F; font-weight: 600;")
+        bbr.addWidget(self.bri_lbl)
+        c1l.addLayout(bbr)
+        self.bri_slider = QSlider(Qt.Orientation.Horizontal)
+        self.bri_slider.setRange(0,4); self.bri_slider.setValue(4)
+        self.bri_slider.valueChanged.connect(self._on_slider)
+        c1l.addWidget(self.bri_slider)
+
+        # Color dots
+        dots = QHBoxLayout(); dots.setSpacing(8)
+        for h in COLOR_DOTS:
+            d = QPushButton(); d.setFixedSize(22,22)
+            d.setStyleSheet(f"background-color: {h}; border: 2px solid rgba(0,0,0,0.08); border-radius: 11px;")
+            d.clicked.connect(lambda _,c=h: self._paint(c))
+            dots.addWidget(d)
+        # + button
+        dp = QPushButton(); dp.setFixedSize(22,22)
+        dp.setStyleSheet("background-color: #F0F0F5; border: 1.5px dashed #AEAEB2; border-radius: 11px;")
+        dp.clicked.connect(self._pick)
+        dots.addWidget(dp)
+        dots.addStretch(1)
+        c1l.addLayout(dots)
         cr.addWidget(c1, 1)
 
-        # Card 2 — brightness / speed
+        # Card 2: Performance
         c2 = self._card()
-        c2l = QVBoxLayout(c2)
-        c2l.setContentsMargins(16, 14, 16, 14)
-        c2l.setSpacing(4)
-        c2l.addWidget(self._lbl("Brightness & Speed", 11, bold=True))
-        self.bright_lbl = QLabel("Brightness (100%)")
-        self.bright_lbl.setStyleSheet("color: #8E8E93; font-size: 10px;")
-        self.bright_slider = QSlider(Qt.Orientation.Horizontal)
-        self.bright_slider.setRange(0, 4)
-        self.bright_slider.setValue(4)
-        self.bright_slider.valueChanged.connect(self._on_slider)
-        c2l.addWidget(self.bright_lbl)
-        c2l.addWidget(self.bright_slider)
-        self.speed_lbl = QLabel("Speed (3)")
-        self.speed_lbl.setStyleSheet("color: #8E8E93; font-size: 10px;")
-        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.speed_slider.setRange(1, 5)
-        self.speed_slider.setValue(3)
-        self.speed_slider.valueChanged.connect(self._on_slider)
-        c2l.addWidget(self.speed_lbl)
-        c2l.addWidget(self.speed_slider)
+        c2l = QVBoxLayout(c2); c2l.setContentsMargins(18,16,18,16); c2l.setSpacing(8)
+        t2 = QHBoxLayout(); t2.setSpacing(6)
+        t2.addWidget(QLabel()); t2.itemAt(0).widget().setPixmap(create_glyph("performance",14,"#6E6E73").pixmap(14,14))
+        t2.addWidget(self._lbl("Performance", 12, bold=True)); t2.addStretch(1)
+        c2l.addLayout(t2)
+
+        # Speed slider
+        sp = QHBoxLayout()
+        sp.addWidget(self._lbl("Animation Speed", 11, color="#6E6E73"))
+        sp.addStretch(1)
+        self.spd_lbl = QLabel("3"); self.spd_lbl.setStyleSheet("color: #1D1D1F; font-weight: 600;")
+        sp.addWidget(self.spd_lbl)
+        c2l.addLayout(sp)
+        self.spd_slider = QSlider(Qt.Orientation.Horizontal)
+        self.spd_slider.setRange(1,5); self.spd_slider.setValue(3)
+        self.spd_slider.valueChanged.connect(self._on_slider)
+        c2l.addWidget(self.spd_slider)
+
+        # Quick select buttons
+        qs = QHBoxLayout(); qs.setSpacing(6)
+        for cid, cn in [("all","All"),("wasd","WASD"),("arrows","Arrows"),("function","F-Row"),("mods","Mods")]:
+            b = QPushButton(cn); b.setProperty("class","btn-ghost")
+            b.setFixedHeight(26); b.setFont(QFont("Inter",9))
+            b.clicked.connect(lambda _,c=cid: self.canvas.select_keys_by_category(c))
+            qs.addWidget(b)
+        bcl = QPushButton("Clear"); bcl.setProperty("class","btn-ghost")
+        bcl.setFixedHeight(26); bcl.setFont(QFont("Inter",9))
+        bcl.clicked.connect(self.canvas.clear_selection)
+        qs.addWidget(bcl)
+        c2l.addLayout(qs)
         cr.addWidget(c2, 1)
 
-        # Card 3 — status
+        # Card 3: Device Info
         c3 = self._card()
-        c3l = QHBoxLayout(c3)
-        c3l.setContentsMargins(16, 14, 16, 14)
-        ib = QVBoxLayout()
-        ib.addWidget(self._lbl("Performance", 11, bold=True))
-        ib.addWidget(self._lbl("All systems optimal.", 9, color="#8E8E93"))
-        c3l.addLayout(ib, 1)
-        ck = QLabel()
-        ck.setPixmap(create_glyph("check", 32, "#FFFFFF").pixmap(32, 32))
-        c3l.addWidget(ck, alignment=Qt.AlignmentFlag.AlignCenter)
+        c3l = QVBoxLayout(c3); c3l.setContentsMargins(18,16,18,16); c3l.setSpacing(6)
+        t3 = QHBoxLayout(); t3.setSpacing(6)
+        t3.addWidget(QLabel()); t3.itemAt(0).widget().setPixmap(create_glyph("settings",14,"#6E6E73").pixmap(14,14))
+        t3.addWidget(self._lbl("Device Info", 12, bold=True)); t3.addStretch(1)
+        c3l.addLayout(t3)
+
+        for lbl, val in [("Firmware Version","1.2.0"),("Hardware Version","1.0"),
+                          ("Serial Number","CBT87X24B000123")]:
+            r = QHBoxLayout()
+            r.addWidget(self._lbl(lbl, 10, color="#6E6E73"))
+            r.addStretch(1)
+            r.addWidget(self._lbl(val, 10, bold=True, color="#1D1D1F"))
+            c3l.addLayout(r)
+
+        c3l.addSpacing(6)
+        rst = QPushButton("Reset to Default"); rst.setProperty("class","btn-ghost")
+        rst.setFixedHeight(28)
+        c3l.addWidget(rst)
         cr.addWidget(c3, 1)
 
         lay.addLayout(cr)
-        return page
+        return pg
 
-    # ------------------------------------------------------------------
-    # Page 1 — Lighting (dedicated effect grid)
-    # ------------------------------------------------------------------
-    def _page_lighting(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(14)
+    # ----------------------------------------------------------------
+    # Page: Lighting (full)
+    # ----------------------------------------------------------------
+    def _pg_lighting(self):
+        pg = QWidget(); lay = QVBoxLayout(pg); lay.setContentsMargins(0,0,0,0); lay.setSpacing(14)
+        panel = QFrame(); panel.setProperty("class","showcase-panel")
+        pl = QVBoxLayout(panel); pl.setContentsMargins(24,20,24,20); pl.setSpacing(14)
+        pl.addWidget(self._lbl("Lighting Effects", 14, bold=True, color="#1D1D1F"))
+        pl.addWidget(self._lbl("Choose a preset or create custom per-key colors.", 11, color="#6E6E73"))
 
-        panel = QFrame()
-        panel.setProperty("class", "glass-panel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(24, 20, 24, 20)
-        pl.setSpacing(16)
-
-        pl.addWidget(self._section("LIGHTING EFFECTS"))
-        pl.addWidget(self._lbl("Choose a lighting preset or create a custom per-key layout.", 11, color="#9E9EA7"))
-
-        grid = QGridLayout()
-        grid.setSpacing(12)
-        effects = [
-            ("Static", "Uniform solid color"),
-            ("Breathing", "Pulsating breath"),
-            ("Spectrum", "Full rainbow cycle"),
-            ("Reactive", "Light on keypress"),
-            ("Ripples", "Outward wave from press"),
-            ("Glittering", "Random sparkle stars"),
-            ("Flowing", "Color stream wave"),
-            ("Explode", "Burst from keypress"),
-            ("Custom RGB", "Per-key matrix coloring"),
-        ]
-        for i, (name, desc) in enumerate(effects):
-            c = self._card()
-            cl = QVBoxLayout(c)
-            cl.setContentsMargins(14, 12, 14, 12)
-            cl.setSpacing(4)
-            cl.addWidget(self._lbl(name, 11, bold=True))
-            cl.addWidget(self._lbl(desc, 9, color="#8E8E93"))
+        grid = QGridLayout(); grid.setSpacing(12)
+        effects = ["Static","Breathing","Spectrum","Reactive","Ripples","Glittering","Flowing","Explode","Custom RGB"]
+        for i, n in enumerate(effects):
+            c = self._card(); cl = QVBoxLayout(c); cl.setContentsMargins(14,12,14,12)
+            cl.addWidget(self._lbl(n, 11, bold=True, color="#1D1D1F"))
             c.setCursor(Qt.CursorShape.PointingHandCursor)
-            grid.addWidget(c, i // 3, i % 3)
-
+            grid.addWidget(c, i//3, i%3)
         pl.addLayout(grid)
 
-        # Color palette strip
-        cp = QHBoxLayout()
-        cp.setSpacing(8)
-        cp.addWidget(self._lbl("Quick Colors:", 10, color="#8E8E93"))
-        for h, nm in QUICK_COLORS:
-            ch = QPushButton()
-            ch.setFixedSize(24, 24)
-            ch.setToolTip(nm)
-            ch.setStyleSheet(
-                f"background-color: {h}; border: 2px solid rgba(255,255,255,0.2);"
-                f"border-radius: 12px;"
-            )
-            ch.clicked.connect(lambda _, c=h: self._quick_paint(c))
-            cp.addWidget(ch)
-        bp = QPushButton("Custom Color...")
-        bp.setProperty("class", "btn-ghost")
-        bp.clicked.connect(self._pick_color)
-        cp.addWidget(bp)
-        cp.addStretch(1)
+        # Color strip
+        cp = QHBoxLayout(); cp.setSpacing(8)
+        cp.addWidget(self._lbl("Quick Colors:", 10, color="#6E6E73"))
+        for h in COLOR_DOTS:
+            d = QPushButton(); d.setFixedSize(26,26)
+            d.setStyleSheet(f"background-color: {h}; border: 2px solid rgba(0,0,0,0.08); border-radius: 13px;")
+            d.clicked.connect(lambda _,c=h: self._paint(c))
+            cp.addWidget(d)
+        bp = QPushButton("Custom..."); bp.setProperty("class","btn-ghost"); bp.clicked.connect(self._pick)
+        cp.addWidget(bp); cp.addStretch(1)
         pl.addLayout(cp)
-
         pl.addStretch(1)
         lay.addWidget(panel)
-        return page
+        return pg
 
-    # ------------------------------------------------------------------
-    # Page 2 — Keymap
-    # ------------------------------------------------------------------
-    def _page_keymap(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        panel = QFrame()
-        panel.setProperty("class", "glass-panel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(24, 20, 24, 20)
-        pl.setSpacing(16)
-        pl.addWidget(self._section("KEY REMAPPING"))
-        pl.addWidget(self._lbl(
-            "Select a key on the Overview keyboard, then assign a custom action below.",
-            11, color="#9E9EA7",
-        ))
-        grid = QGridLayout()
-        grid.setSpacing(12)
-        actions = [
-            "Media Play/Pause", "Volume Up", "Volume Down", "Mute",
-            "Next Track", "Previous Track", "Calculator", "Browser",
-            "Swap Ctrl/Caps", "Disable Key", "Layer Toggle", "Macro Trigger",
-        ]
-        for i, act in enumerate(actions):
-            c = self._card()
-            cl = QVBoxLayout(c)
-            cl.setContentsMargins(14, 12, 14, 12)
-            cl.addWidget(self._lbl(act, 10, bold=True))
-            c.setCursor(Qt.CursorShape.PointingHandCursor)
-            grid.addWidget(c, i // 3, i % 3)
-        pl.addLayout(grid)
-        pl.addStretch(1)
+    # ----------------------------------------------------------------
+    # Page: Performance
+    # ----------------------------------------------------------------
+    def _pg_performance(self):
+        pg = QWidget(); lay = QVBoxLayout(pg); lay.setContentsMargins(0,0,0,0); lay.setSpacing(14)
+        panel = QFrame(); panel.setProperty("class","showcase-panel")
+        pl = QVBoxLayout(panel); pl.setContentsMargins(24,20,24,20); pl.setSpacing(14)
+        pl.addWidget(self._lbl("Performance & Diagnostics", 14, bold=True, color="#1D1D1F"))
+        grid = QGridLayout(); grid.setSpacing(14)
+        metrics = [("Polling Rate","1000 Hz"),("Key Debounce","5 ms"),("N-Key Rollover","Full NKRO"),
+                   ("Matrix Scan","~16 kHz"),("LED Refresh","1.5 s"),("CPU Usage","< 0.01%")]
+        for i,(t,v) in enumerate(metrics):
+            c = self._card(); cl = QVBoxLayout(c); cl.setContentsMargins(16,14,16,14); cl.setSpacing(4)
+            cl.addWidget(self._lbl(t, 9, color="#AEAEB2"))
+            cl.addWidget(self._lbl(v, 18, bold=True, color="#1D1D1F"))
+            grid.addWidget(c, i//3, i%3)
+        pl.addLayout(grid); pl.addStretch(1)
         lay.addWidget(panel)
-        return page
+        return pg
 
-    # ------------------------------------------------------------------
-    # Page 3 — Macros
-    # ------------------------------------------------------------------
-    def _page_macros(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        panel = QFrame()
-        panel.setProperty("class", "glass-panel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(24, 20, 24, 20)
-        pl.setSpacing(16)
-        pl.addWidget(self._section("MACRO SEQUENCES"))
-        pl.addWidget(self._lbl(
-            "Record keystrokes with millisecond precision and assign them to any key.",
-            11, color="#9E9EA7",
-        ))
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        btn_rec = QPushButton("Start Recording")
-        btn_rec.setProperty("class", "btn-primary")
-        row.addWidget(btn_rec)
-        btn_stop = QPushButton("Stop")
-        btn_stop.setProperty("class", "btn-ghost")
-        row.addWidget(btn_stop)
-        row.addStretch(1)
-        pl.addLayout(row)
-        pl.addWidget(self._lbl("Saved Macros", 11, bold=True))
-        pl.addWidget(self._lbl("No macros recorded yet.", 10, color="#5C5C64"))
-        pl.addStretch(1)
-        lay.addWidget(panel)
-        return page
-
-    # ------------------------------------------------------------------
-    # Page 4 — Performance
-    # ------------------------------------------------------------------
-    def _page_performance(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        panel = QFrame()
-        panel.setProperty("class", "glass-panel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(24, 20, 24, 20)
-        pl.setSpacing(16)
-        pl.addWidget(self._section("PERFORMANCE & DIAGNOSTICS"))
-
-        grid = QGridLayout()
-        grid.setSpacing(14)
-
-        metrics = [
-            ("Polling Rate", "1000 Hz", "USB full-speed HID interrupt endpoint"),
-            ("Key Debounce", "5 ms", "Hardware debounce on Sonix MCU"),
-            ("N-Key Rollover", "Full NKRO", "All 87 keys simultaneous"),
-            ("Matrix Scan Rate", "~16 kHz", "Firmware matrix scan frequency"),
-            ("LED Refresh", "1.5 s", "Daemon keep-alive interval"),
-            ("CPU Usage", "< 0.01%", "Background daemon resource impact"),
-        ]
-        for i, (title, value, desc) in enumerate(metrics):
-            c = self._card()
-            cl = QVBoxLayout(c)
-            cl.setContentsMargins(16, 14, 16, 14)
-            cl.setSpacing(4)
-            cl.addWidget(self._lbl(title, 9, color="#8E8E93"))
-            cl.addWidget(self._lbl(value, 16, bold=True))
-            cl.addWidget(self._lbl(desc, 9, color="#5C5C64"))
-            grid.addWidget(c, i // 3, i % 3)
-
-        pl.addLayout(grid)
-        pl.addStretch(1)
-        lay.addWidget(panel)
-        return page
-
-    # ------------------------------------------------------------------
-    # Page 5 — Settings
-    # ------------------------------------------------------------------
-    def _page_settings(self):
-        page = QWidget()
-        lay = QVBoxLayout(page)
-        panel = QFrame()
-        panel.setProperty("class", "glass-panel")
-        pl = QVBoxLayout(panel)
-        pl.setContentsMargins(24, 20, 24, 20)
-        pl.setSpacing(16)
-        pl.addWidget(self._section("SETTINGS"))
-
-        # Daemon control
-        pl.addWidget(self._lbl("Background Service", 12, bold=True))
-        pl.addWidget(self._lbl(
-            "The CBGK daemon runs in the background to maintain persistent lighting.\n"
-            "It uses < 0.01% CPU and refreshes the LED buffer every 1.5 seconds.",
-            10, color="#9E9EA7",
-        ))
-        dr = QHBoxLayout()
-        dr.setSpacing(12)
-        self.btn_daemon_start = QPushButton("Start Daemon")
-        self.btn_daemon_start.setProperty("class", "btn-primary")
-        self.btn_daemon_start.clicked.connect(self._ensure_daemon)
-        dr.addWidget(self.btn_daemon_start)
-        self.btn_daemon_stop = QPushButton("Stop Daemon")
-        self.btn_daemon_stop.setProperty("class", "btn-ghost")
-        self.btn_daemon_stop.clicked.connect(self._stop_daemon)
-        dr.addWidget(self.btn_daemon_stop)
-        dr.addStretch(1)
+    # ----------------------------------------------------------------
+    # Page: Settings
+    # ----------------------------------------------------------------
+    def _pg_settings(self):
+        pg = QWidget(); lay = QVBoxLayout(pg); lay.setContentsMargins(0,0,0,0); lay.setSpacing(14)
+        panel = QFrame(); panel.setProperty("class","showcase-panel")
+        pl = QVBoxLayout(panel); pl.setContentsMargins(24,20,24,20); pl.setSpacing(14)
+        pl.addWidget(self._lbl("Settings", 14, bold=True, color="#1D1D1F"))
+        pl.addWidget(self._lbl("Background Service", 12, bold=True, color="#1D1D1F"))
+        pl.addWidget(self._lbl("The daemon maintains persistent lighting (< 0.01% CPU).", 11, color="#6E6E73"))
+        dr = QHBoxLayout(); dr.setSpacing(12)
+        bs = QPushButton("Start Daemon"); bs.setProperty("class","btn-save"); bs.clicked.connect(self._boot_daemon)
+        dr.addWidget(bs)
+        bst = QPushButton("Stop Daemon"); bst.setProperty("class","btn-ghost")
+        bst.clicked.connect(lambda: (send_ipc_command("stop") if True else None))
+        dr.addWidget(bst); dr.addStretch(1)
         pl.addLayout(dr)
-
         pl.addSpacing(16)
-
-        # About
-        pl.addWidget(self._lbl("About", 12, bold=True))
-        pl.addWidget(self._lbl(
-            "CBGK Trinity Linux Software Suite v1.0.0\n"
-            "Cosmic Byte Trinity 87K TKL Gaming Keyboard\n"
-            "Sonix MCU (VID 0C45 / PID 8006)\n"
-            "Created by OVERxPOWERED",
-            10, color="#8E8E93",
-        ))
-
+        pl.addWidget(self._lbl("About", 12, bold=True, color="#1D1D1F"))
+        pl.addWidget(self._lbl("CBGK Trinity Linux Suite v1.0.0\nSonix MCU (0C45:8006)\nBy OVERxPOWERED", 10, color="#6E6E73"))
         pl.addStretch(1)
         lay.addWidget(panel)
-        return page
+        return pg
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------
+    # Stub page
+    # ----------------------------------------------------------------
+    def _pg_stub(self, title, desc):
+        pg = QWidget(); lay = QVBoxLayout(pg)
+        panel = QFrame(); panel.setProperty("class","showcase-panel")
+        pl = QVBoxLayout(panel); pl.setContentsMargins(24,20,24,20); pl.setSpacing(14)
+        pl.addWidget(self._lbl(title, 14, bold=True, color="#1D1D1F"))
+        pl.addWidget(self._lbl(desc, 11, color="#6E6E73"))
+        pl.addStretch(1)
+        lay.addWidget(panel)
+        return pg
+
+    # ----------------------------------------------------------------
     # Actions
-    # ------------------------------------------------------------------
-    def _quick_paint(self, hex_color: str):
-        self.active_color = hex_color
-        self.canvas.set_active_paint_color(hex_color)
-        self.canvas.paint_selected(hex_color)
+    # ----------------------------------------------------------------
+    def _paint(self, c):
+        self.color = c; self.canvas.set_active_paint_color(c)
+        self.canvas.paint_selected(c)
 
-    def _pick_color(self):
-        col = QColorDialog.getColor(QColor(self.active_color), self, "Select Color")
-        if col.isValid():
-            self._quick_paint(col.name().upper())
+    def _pick(self):
+        c = QColorDialog.getColor(QColor(self.color), self, "Select Color")
+        if c.isValid(): self._paint(c.name().upper())
 
-    def _on_canvas_changed(self):
-        """Fired when a key is painted. Does NOT auto-dispatch to keyboard."""
-        self.active_mode = "custom"
-
-    def _on_mode_changed(self, idx: int):
-        self.active_mode = self.mode_combo.currentData()
+    def _on_canvas(self): self.mode = "custom"
+    def _on_mode(self, _): self.mode = self.mode_combo.currentData()
 
     def _on_slider(self):
-        self.brightness = self.bright_slider.value()
-        self.speed = self.speed_slider.value()
-        self.bright_lbl.setText(f"Brightness ({int(self.brightness / 4 * 100)}%)")
-        self.speed_lbl.setText(f"Speed ({self.speed})")
+        self.brightness = self.bri_slider.value()
+        self.speed = self.spd_slider.value()
+        self.bri_lbl.setText(f"{int(self.brightness/4*100)}%")
+        self.spd_lbl.setText(str(self.speed))
 
-    def _apply_to_keyboard(self):
-        """User-triggered: send current state to keyboard hardware."""
-        if self.active_mode == "custom":
-            self.worker.submit_color(self.active_color, self.canvas.key_colors)
+    def _apply(self):
+        if self.mode == "custom":
+            self.worker.submit_color(self.color, self.canvas.key_colors)
         else:
-            self.worker.submit_mode(self.active_mode, self.active_color,
-                                    self.speed, self.brightness)
-        self.sub_greet.setText("Applied to keyboard.")
-        QTimer.singleShot(2000, lambda: self.sub_greet.setText("Your Trinity 87K is ready to go."))
+            self.worker.submit_mode(self.mode, self.color, self.speed, self.brightness)
 
-    def _stop_daemon(self):
-        try:
-            send_ipc_command("stop")
-        except Exception:
-            pass
+    def _fill_profiles(self):
+        self.prof_combo.blockSignals(True); self.prof_combo.clear()
+        active = self.pmgr.get_active_profile_name()
+        for i, p in enumerate(self.pmgr.list_profiles()):
+            n = p.get("name","Profile")
+            self.prof_combo.addItem(f"  {n}", n)
+            if n == active: self.prof_combo.setCurrentIndex(i)
+        self.prof_combo.blockSignals(False)
 
-    def _populate_profiles(self):
-        self.profile_combo.blockSignals(True)
-        self.profile_combo.clear()
-        profiles = self.profile_mgr.list_profiles()
-        active = self.profile_mgr.get_active_profile_name()
-        for i, p in enumerate(profiles):
-            name = p.get("name", "Profile")
-            self.profile_combo.addItem(f"  {name}", name)
-            if name == active:
-                self.profile_combo.setCurrentIndex(i)
-        self.profile_combo.blockSignals(False)
-
-    def _on_profile_changed(self, idx: int):
-        name = self.profile_combo.currentData()
-        if name:
-            prof = self.profile_mgr.get_profile(name)
-            if prof:
-                self.profile_mgr.set_active_profile_name(name)
-                self.canvas.set_color_map(prof.get("per_key", {}))
-                self.active_color = prof.get("color", "#CB94F7")
-                self.canvas.set_active_paint_color(self.active_color)
-                self.active_mode = prof.get("mode", "custom")
-                self._apply_to_keyboard()
+    def _on_profile(self, _):
+        n = self.prof_combo.currentData()
+        if not n: return
+        prof = self.pmgr.get_profile(n)
+        if prof:
+            self.pmgr.set_active_profile_name(n)
+            self.canvas.set_color_map(prof.get("per_key",{}))
+            self.color = prof.get("color","#FFFFFF")
+            self.canvas.set_active_paint_color(self.color)
+            self.mode = prof.get("mode","custom")
+            self._apply()
 
     def _save_profile(self):
-        name, ok = QInputDialog.getText(self, "Save Profile", "Profile Name:")
-        if ok and name.strip():
-            data = {
-                "name": name.strip(),
-                "description": f"Saved {time.strftime('%Y-%m-%d %H:%M')}",
-                "mode": self.active_mode,
-                "color": self.active_color,
-                "speed": self.speed,
-                "brightness": self.brightness,
-                "per_key": dict(self.canvas.key_colors),
-            }
-            self.profile_mgr.save_profile(name.strip(), data)
-            self._populate_profiles()
+        n, ok = QInputDialog.getText(self, "Save Profile", "Name:")
+        if ok and n.strip():
+            self.pmgr.save_profile(n.strip(), {
+                "name":n.strip(), "description":f"Saved {time.strftime('%Y-%m-%d %H:%M')}",
+                "mode":self.mode, "color":self.color,
+                "speed":self.speed, "brightness":self.brightness,
+                "per_key":dict(self.canvas.key_colors),
+            })
+            self._fill_profiles()
 
-    def _load_initial_profile(self):
-        active = self.profile_mgr.get_active_profile_name()
-        prof = self.profile_mgr.get_profile(active)
+    def _load_profile(self):
+        prof = self.pmgr.get_profile(self.pmgr.get_active_profile_name())
         if prof:
-            self.canvas.set_color_map(prof.get("per_key", {}))
-            self.active_color = prof.get("color", "#CB94F7")
-            self.canvas.set_active_paint_color(self.active_color)
+            self.canvas.set_color_map(prof.get("per_key",{}))
+            self.color = prof.get("color","#FFFFFF")
+            self.canvas.set_active_paint_color(self.color)
 
-    def _poll_status(self):
+    def _poll(self):
         try:
             Device.find_device()
-            self.status_dot.setStyleSheet("color: #27C93F;")
-            self.status_text.setText("Connected")
+            self.dot.setStyleSheet("color: #34C759; font-size: 12px;")
+            self.conn_lbl.setText("Connected"); self.conn_lbl.setStyleSheet("color: #34C759; font-size: 12px;")
         except DeviceError:
-            self.status_dot.setStyleSheet("color: #FFBD2E;")
-            self.status_text.setText("Searching...")
+            self.dot.setStyleSheet("color: #FF9500; font-size: 12px;")
+            self.conn_lbl.setText("Searching..."); self.conn_lbl.setStyleSheet("color: #FF9500; font-size: 12px;")
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Cosmic Byte Trinity")
-    w = MainWindow()
-    w.show()
+    w = MainWindow(); w.show()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
