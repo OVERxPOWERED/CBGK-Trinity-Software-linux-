@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
         tools_layout = QHBoxLayout()
         tools_layout.setSpacing(8)
         tools_lbl = QLabel("Interactive 87-Key Matrix:")
-        tools_lbl.setFont(QFont("Inter", 11, QFont.Weight.SemiBold))
+        tools_lbl.setFont(QFont("Inter", 11, QFont.Weight.DemiBold))
         tools_layout.addWidget(tools_lbl)
 
         for cat_name, label in [("all", "All"), ("wasd", "WASD"), ("arrows", "Arrows"), ("function", "F-Keys"), ("mods", "Modifiers")]:
