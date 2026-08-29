@@ -535,7 +535,10 @@ class MainWindow(QMainWindow):
     def _paint(self, c):
         self.color = c
         self.canvas.set_active_paint_color(c)
-        self.canvas.paint_selected(c)
+        if self.mode == "custom":
+            self.canvas.paint_selected(c)
+        else:
+            self.canvas.set_all_colors(c)
 
     def _pick(self):
         c = QColorDialog.getColor(QColor(self.color), self, "Select Color")
@@ -543,6 +546,7 @@ class MainWindow(QMainWindow):
             self._paint(c.name().upper())
 
     def _on_canvas(self):
+        # User clicked/painted individual keys on canvas -> set mode to Custom RGB
         self.mode = "custom"
         self.mode_combo.blockSignals(True)
         self.mode_combo.setCurrentIndex(0)
@@ -550,6 +554,8 @@ class MainWindow(QMainWindow):
 
     def _on_mode(self, _):
         self.mode = self.mode_combo.currentData()
+        if self.mode != "custom":
+            self.canvas.set_all_colors(self.color)
 
     def _on_slider(self):
         self.brightness = self.bri_slider.value()
@@ -564,9 +570,9 @@ class MainWindow(QMainWindow):
             self.status_msg.setText("[✔] Saved custom per-key lighting matrix to keyboard.")
         else:
             self.worker.submit_mode(self.mode, self.color, self.speed, self.brightness)
-            self.status_msg.setText(f"[✔] Saved {self.mode.capitalize()} effect to keyboard.")
+            self.status_msg.setText(f"[✔] Saved {self.mode.replace('_', ' ').title()} effect ({self.color}) to keyboard.")
 
-        QTimer.singleShot(2500, lambda: self.status_msg.setText("Ready."))
+        QTimer.singleShot(3000, lambda: self.status_msg.setText("Ready."))
 
     def _reset_defaults(self):
         self._paint("#FFFFFF")

@@ -74,17 +74,7 @@ class AsyncHardwareWorker(threading.Thread):
         hex_color = task.get("color", "#CB94F7")
         key_colors = task.get("key_colors")
 
-        # Try daemon IPC first
-        try:
-            if key_colors:
-                send_ipc_command("set_custom_matrix", per_key=key_colors, color=hex_color)
-            else:
-                send_ipc_command("set_color", color=hex_color)
-            return
-        except Exception:
-            pass
-
-        # Direct hardware fallback
+        # 1. Direct hardware execution
         try:
             with Device() as dev:
                 if key_colors:
@@ -103,7 +93,16 @@ class AsyncHardwareWorker(threading.Thread):
                 else:
                     r, g, b = hex_to_rgb(hex_color)
                     Protocol.set_solid_color(dev, r, g, b)
-        except DeviceError:
+        except Exception as e:
+            print(f"[!] Direct color transmission error: {e}")
+
+        # 2. Sync daemon state if running
+        try:
+            if key_colors:
+                send_ipc_command("set_custom_matrix", per_key=key_colors, color=hex_color)
+            else:
+                send_ipc_command("set_color", color=hex_color)
+        except Exception:
             pass
 
     def _do_mode(self, task: dict):
@@ -112,18 +111,19 @@ class AsyncHardwareWorker(threading.Thread):
         speed = task.get("speed", 3)
         brightness = task.get("brightness", 4)
 
+        # 1. Direct hardware execution
         try:
-            send_ipc_command("set_mode", mode=mode_name, color=color,
-                             speed=speed, brightness=brightness)
-            return
-        except Exception:
-            pass
-
-        try:
-            mode_id = LIGHTING_MODES.get(mode_name, 1)
+            mode_id = LIGHTING_MODES.get(mode_name, 0)
             r, g, b = hex_to_rgb(color)
             with Device() as dev:
                 Protocol.set_preset_mode(dev, mode_id=mode_id, speed=speed,
                                          brightness=brightness, r=r, g=g, b=b)
-        except DeviceError:
+        except Exception as e:
+            print(f"[!] Direct mode transmission error: {e}")
+
+        # 2. Sync daemon state if running
+        try:
+            send_ipc_command("set_mode", mode=mode_name, color=color,
+                             speed=speed, brightness=brightness)
+        except Exception:
             pass
