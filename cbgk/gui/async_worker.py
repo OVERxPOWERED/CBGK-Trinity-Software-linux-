@@ -76,35 +76,30 @@ class AsyncHardwareWorker(threading.Thread):
 
         # Try daemon IPC first
         try:
-            send_ipc_command("set_color", color=hex_color)
+            if key_colors:
+                send_ipc_command("set_custom_matrix", per_key=key_colors, color=hex_color)
+            else:
+                send_ipc_command("set_color", color=hex_color)
             return
         except Exception:
             pass
 
-        # Direct hardware fallback: read live matrix → patch → upload
+        # Direct hardware fallback
         try:
             with Device() as dev:
                 if key_colors:
-                    # Read the real live matrix from firmware RAM
-                    matrix_data = Protocol.read_live_matrix(dev)
-                    patched = bytearray(matrix_data)
-
-                    # Build a lookup: matrix_idx -> (r, g, b) from the GUI color map
-                    idx_to_rgb = {}
+                    buf = bytearray(576)
+                    for slot in range(144):
+                        buf[slot * 4] = slot
                     for k in KEYS_87:
-                        col = key_colors.get(k.name, hex_color)
-                        idx_to_rgb[k.matrix_idx] = hex_to_rgb(col)
-
-                    # Patch every key entry in the real buffer
-                    for i in range(0, len(patched), 4):
-                        m_idx = patched[i]
-                        if m_idx in idx_to_rgb:
-                            r, g, b = idx_to_rgb[m_idx]
-                            patched[i + 1] = r
-                            patched[i + 2] = g
-                            patched[i + 3] = b
-
-                    Protocol.upload_matrix_buffer(dev, patched)
+                        off = k.matrix_idx * 4
+                        if off + 4 <= len(buf):
+                            col = key_colors.get(k.name, hex_color)
+                            r, g, b = hex_to_rgb(col)
+                            buf[off + 1] = r
+                            buf[off + 2] = g
+                            buf[off + 3] = b
+                    Protocol.upload_matrix_buffer(dev, buf)
                 else:
                     r, g, b = hex_to_rgb(hex_color)
                     Protocol.set_solid_color(dev, r, g, b)

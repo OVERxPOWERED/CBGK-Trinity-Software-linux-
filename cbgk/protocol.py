@@ -47,7 +47,7 @@ class Protocol:
         hdr[1] = 0x20
         hdr[8] = 0x08 # Required header flag at offset 8
         dev.send_feature(hdr)
-        time.sleep(0.004)
+        time.sleep(0.005)
 
         # 2. Upload 9 chunks of 64 bytes
         for i in range(0, len(buffer), 64):
@@ -62,53 +62,60 @@ class Protocol:
         commit[0] = 0x04
         commit[1] = 0x02
         dev.send_feature(commit)
+        time.sleep(0.005)
+
+        # 4. Finish packet
+        finish = bytearray(64)
+        finish[0] = 0x04
+        finish[1] = 0xF0
+        dev.send_feature(finish)
+        time.sleep(0.005)
 
     @classmethod
     def set_solid_color(cls, dev: Device, r: int, g: int, b: int):
         """
         Applies a solid uniform RGB color to all 87 keys on the keyboard.
         """
-        # Read current live matrix geometry
-        matrix_data = cls.read_live_matrix(dev)
-        patched = bytearray(matrix_data)
-
-        # Patch all key entries with target RGB
-        for i in range(0, len(patched), 4):
-            patched[i + 1] = r
-            patched[i + 2] = g
-            patched[i + 3] = b
-
-        cls.upload_matrix_buffer(dev, patched)
+        buf = bytearray(576)
+        for slot in range(144):
+            buf[slot * 4] = slot
+        for k in KEYS_87:
+            off = k.matrix_idx * 4
+            if off + 4 <= len(buf):
+                buf[off + 1] = r
+                buf[off + 2] = g
+                buf[off + 3] = b
+        cls.upload_matrix_buffer(dev, buf)
 
     @classmethod
-    def set_per_key_colors(cls, dev: Device, color_map: Dict[Union[int, str], Tuple[int, int, int]]):
+    def set_per_key_colors(cls, dev: Device, color_map: Dict[Union[int, str], Tuple[int, int, int]], default_rgb: Tuple[int, int, int] = (0xCB, 0x94, 0xF7)):
         """
-        Sets individual colors for specific keys.
-        color_map can take key names ('w', 'a', 's', 'd', 'esc') or matrix indices.
+        Sets individual colors for specific keys using exact matrix_idx * 4 offsets.
         """
-        matrix_data = cls.read_live_matrix(dev)
-        patched = bytearray(matrix_data)
+        buf = bytearray(576)
+        for slot in range(144):
+            buf[slot * 4] = slot
+        def_r, def_g, def_b = default_rgb
+        for k in KEYS_87:
+            off = k.matrix_idx * 4
+            if off + 4 <= len(buf):
+                buf[off + 1] = def_r
+                buf[off + 2] = def_g
+                buf[off + 3] = def_b
 
-        # Build lookup table of target matrix indices to (r, g, b)
-        target_indices: Dict[int, Tuple[int, int, int]] = {}
         for key_ref, color in color_map.items():
             if isinstance(key_ref, str):
                 k_info = KEY_BY_NAME.get(key_ref.lower())
                 if k_info:
-                    target_indices[k_info.matrix_idx] = color
+                    off = k_info.matrix_idx * 4
+                    if off + 4 <= len(buf):
+                        buf[off + 1], buf[off + 2], buf[off + 3] = color
             elif isinstance(key_ref, int):
-                target_indices[key_ref] = color
+                off = key_ref * 4
+                if off + 4 <= len(buf):
+                    buf[off + 1], buf[off + 2], buf[off + 3] = color
 
-        # Apply specific key colors to buffer
-        for i in range(0, len(patched), 4):
-            m_idx = patched[i]
-            if m_idx in target_indices:
-                r, g, b = target_indices[m_idx]
-                patched[i + 1] = r
-                patched[i + 2] = g
-                patched[i + 3] = b
-
-        cls.upload_matrix_buffer(dev, patched)
+        cls.upload_matrix_buffer(dev, buf)
 
     @staticmethod
     def set_preset_mode(

@@ -28,7 +28,7 @@ class Daemon:
         self.profile_mgr = ProfileManager()
         self.current_profile_name = self.profile_mgr.get_active_profile_name()
         self.current_profile = self.profile_mgr.get_profile(self.current_profile_name) or self.profile_mgr.get_profile("Lavender Bliss")
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.device: Optional[Device] = None
         self.active_buffer: Optional[bytearray] = None
         self.preset_mode_info: Optional[Dict[str, Any]] = None
@@ -56,12 +56,13 @@ class Daemon:
 
                 # Initialize full 576-byte buffer with 144 key entries
                 buf = bytearray(576)
+                for slot in range(144):
+                    buf[slot * 4] = slot
                 for k in KEYS_87:
-                    off = (k.matrix_idx - 1) * 4
+                    off = k.matrix_idx * 4
                     if off + 4 <= len(buf):
                         hex_col = per_key.get(k.name, global_color)
                         r, g, b = hex_to_rgb(hex_col)
-                        buf[off] = k.matrix_idx
                         buf[off + 1] = r
                         buf[off + 2] = g
                         buf[off + 3] = b
@@ -171,29 +172,12 @@ class Daemon:
     def _handle_client(self, client_sock: socket.socket):
         """Processes IPC JSON commands from CLI or GUI."""
         try:
-            client_sock.settimeout(1.0)
-            data_chunks = []
-            while True:
-                try:
-                    chunk = client_sock.recv(4096)
-                    if not chunk:
-                        break
-                    data_chunks.append(chunk)
-                    # Try parsing if valid JSON
-                    try:
-                        raw = b"".join(data_chunks).decode("utf-8")
-                        req = json.loads(raw)
-                        break
-                    except json.JSONDecodeError:
-                        continue
-                except socket.timeout:
-                    break
-
-            if not data_chunks:
+            client_sock.settimeout(2.0)
+            raw = client_sock.recv(65536).decode("utf-8")
+            if not raw:
                 return
 
-            raw = b"".join(data_chunks).decode("utf-8")
-            req = json.loads(raw)
+            req = json.loads(raw.strip())
             cmd = req.get("cmd", "")
 
             response = {"status": "ok"}
@@ -223,6 +207,21 @@ class Daemon:
                     }
                     self.load_active_profile()
                 response["message"] = f"Applied color {hex_color}"
+
+            elif cmd == "set_custom_matrix":
+                per_key = req.get("per_key", {})
+                global_color = req.get("color", "#FFFFFF")
+                with self.lock:
+                    self.current_profile = {
+                        "name": "Custom Matrix",
+                        "mode": "custom",
+                        "color": global_color,
+                        "brightness": 4,
+                        "speed": 3,
+                        "per_key": dict(per_key)
+                    }
+                    self.load_active_profile()
+                response["message"] = "Applied custom per-key matrix"
 
             elif cmd == "set_mode":
                 mode_name = req.get("mode", "static")
@@ -278,18 +277,16 @@ def send_ipc_command(cmd: str, **kwargs) -> Dict[str, Any]:
         raise ConnectionError("CBGK daemon is not running.")
 
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(2.0)
+    sock.settimeout(2.5)
     try:
         sock.connect(SOCKET_PATH)
         payload = json.dumps({"cmd": cmd, **kwargs})
         sock.sendall(payload.encode("utf-8"))
-        sock.shutdown(socket.SHUT_WR)
-        resp = sock.recv(8192).decode("utf-8")
+        resp = sock.recv(65536).decode("utf-8")
         if not resp:
             raise ConnectionError("Empty response from daemon.")
-        return json.loads(resp)
+        return json.loads(resp.strip())
     except (socket.timeout, ConnectionRefusedError, OSError) as e:
-        # If stale socket, clean up
         if os.path.exists(SOCKET_PATH):
             try: os.remove(SOCKET_PATH)
             except OSError: pass
