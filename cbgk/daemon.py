@@ -118,12 +118,12 @@ class Daemon:
         print(f"[*] IPC Socket active at {SOCKET_PATH}")
 
         self.load_active_profile()
-        last_refresh_time = 0.0
+        self._sync_hardware()
 
         try:
             while self.running:
-                # 1. Check for incoming IPC client requests
-                readable, _, _ = select.select([server_sock], [], [], 0.05)
+                # Check for incoming IPC client requests
+                readable, _, _ = select.select([server_sock], [], [], 0.5)
                 if readable:
                     try:
                         client_sock, _ = server_sock.accept()
@@ -131,34 +131,40 @@ class Daemon:
                         client_thread.start()
                     except Exception:
                         pass
+        finally:
+            if self.device:
+                self.device.close()
+            server_sock.close()
+            if os.path.exists(SOCKET_PATH):
+                os.remove(SOCKET_PATH)
+            if os.path.exists(PID_FILE):
+                os.remove(PID_FILE)
+            print("[*] CBGK Daemon terminated cleanly.")
 
-                # 2. Maintain hardware lighting state
-                now = time.time()
-                if now - last_refresh_time >= 1.5:
-                    last_refresh_time = now
-                    if self._ensure_device():
-                        try:
-                            with self.lock:
-                                if self.active_buffer:
-                                    Protocol.upload_matrix_buffer(self.device, self.active_buffer)
-                                elif self.preset_mode_info:
-                                    p = self.preset_mode_info
-                                    Protocol.set_preset_mode(
-                                        self.device,
-                                        mode_id=p["mode_id"],
-                                        speed=p["speed"],
-                                        brightness=p["brightness"],
-                                        direction=p["direction"],
-                                        r=p["r"],
-                                        g=p["g"],
-                                        b=p["b"]
-                                    )
-                                    self.preset_mode_info = None # Preset committed to EEPROM, no need to resend continuously
-                        except Exception as e:
-                            print(f"[!] Transmission failed: {e}. Reconnecting...")
-                            if self.device:
-                                self.device.close()
-                            self.device = None
+    def _sync_hardware(self):
+        """Transmits current active lighting state to physical hardware once."""
+        if not self._ensure_device():
+            return
+        try:
+            with self.lock:
+                if self.active_buffer:
+                    Protocol.upload_matrix_buffer(self.device, self.active_buffer)
+                elif self.preset_mode_info:
+                    p = self.preset_mode_info
+                    Protocol.set_preset_mode(
+                        self.device,
+                        mode_id=p["mode_id"],
+                        speed=p["speed"],
+                        brightness=p["brightness"],
+                        direction=p["direction"],
+                        r=p["r"],
+                        g=p["g"],
+                        b=p["b"]
+                    )
+        except Exception as e:
+            if self.device:
+                self.device.close()
+            self.device = None
         finally:
             if self.device:
                 self.device.close()
@@ -206,6 +212,7 @@ class Daemon:
                         "per_key": {k.name: hex_color for k in KEYS_87}
                     }
                     self.load_active_profile()
+                self._sync_hardware()
                 response["message"] = f"Applied color {hex_color}"
 
             elif cmd == "set_custom_matrix":
@@ -221,6 +228,7 @@ class Daemon:
                         "per_key": dict(per_key)
                     }
                     self.load_active_profile()
+                self._sync_hardware()
                 response["message"] = "Applied custom per-key matrix"
 
             elif cmd == "set_mode":
@@ -238,6 +246,7 @@ class Daemon:
                         "per_key": {}
                     }
                     self.load_active_profile()
+                self._sync_hardware()
                 response["message"] = f"Applied preset {mode_name}"
 
             elif cmd == "apply_profile":
@@ -249,6 +258,7 @@ class Daemon:
                         self.current_profile = prof
                         self.profile_mgr.set_active_profile_name(p_name)
                         self.load_active_profile()
+                    self._sync_hardware()
                     response["message"] = f"Switched to profile {p_name}"
                 else:
                     response["status"] = "error"

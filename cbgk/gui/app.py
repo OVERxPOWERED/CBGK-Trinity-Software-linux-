@@ -352,6 +352,14 @@ class MainWindow(QMainWindow):
         dots.addWidget(dp)
         dots.addStretch(1)
         c1l.addLayout(dots)
+
+        # Dedicated "Paint Selected Keys" Button
+        self.btn_paint_selected = QPushButton("Paint Selected Keys")
+        self.btn_paint_selected.setProperty("class", "btn-ghost")
+        self.btn_paint_selected.setFixedHeight(28)
+        self.btn_paint_selected.clicked.connect(lambda: self._paint(self.color))
+        c1l.addWidget(self.btn_paint_selected)
+
         cr.addWidget(c1, 1)
 
         # Card 2: Performance & Quick Selection

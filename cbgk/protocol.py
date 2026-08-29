@@ -37,11 +37,31 @@ class Protocol:
         return matrix_data
 
     @staticmethod
-    def upload_matrix_buffer(dev: Device, buffer: bytearray):
+    def upload_matrix_buffer(dev: Device, buffer: bytearray, brightness: int = 4, speed: int = 3, r: int = 0xCB, g: int = 0x94, b: int = 0xF7):
         """
-        Uploads a 576-byte matrix buffer to the keyboard using 0x04 0x20.
+        Uploads a 576-byte matrix buffer to the keyboard using Mode 20 and 0x04 0x20.
         """
-        # 1. Custom Lighting Header
+        # 1. Activate Mode 20 (Custom User Record Mode in Flash)
+        hdr_mode = bytearray(64)
+        hdr_mode[0] = 0x04
+        hdr_mode[1] = 0x18
+        dev.send_feature(hdr_mode)
+        time.sleep(0.01)
+
+        mode_pkt = bytearray(64)
+        mode_pkt[0] = 0x04
+        mode_pkt[1] = 0x11
+        mode_pkt[2] = 0x14 # Mode 20 (Custom Lighting)
+        mode_pkt[3] = speed
+        mode_pkt[4] = brightness
+        mode_pkt[5] = 0x00
+        mode_pkt[6] = r
+        mode_pkt[7] = g
+        mode_pkt[8] = b
+        dev.send_feature(mode_pkt)
+        time.sleep(0.01)
+
+        # 2. Custom Lighting Header
         hdr = bytearray(64)
         hdr[0] = 0x04
         hdr[1] = 0x20
@@ -49,7 +69,7 @@ class Protocol:
         dev.send_feature(hdr)
         time.sleep(0.005)
 
-        # 2. Upload 9 chunks of 64 bytes
+        # 3. Upload 9 chunks of 64 bytes
         for i in range(0, len(buffer), 64):
             chunk = buffer[i:i+64]
             if len(chunk) < 64:
@@ -57,19 +77,12 @@ class Protocol:
             dev.send_feature(chunk)
             time.sleep(0.002)
 
-        # 3. Commit packet
+        # 4. Commit packet
         commit = bytearray(64)
         commit[0] = 0x04
         commit[1] = 0x02
         dev.send_feature(commit)
-        time.sleep(0.005)
-
-        # 4. Finish packet
-        finish = bytearray(64)
-        finish[0] = 0x04
-        finish[1] = 0xF0
-        dev.send_feature(finish)
-        time.sleep(0.005)
+        time.sleep(0.01)
 
     @classmethod
     def set_solid_color(cls, dev: Device, r: int, g: int, b: int):
