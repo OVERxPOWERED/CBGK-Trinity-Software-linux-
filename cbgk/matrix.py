@@ -123,27 +123,27 @@ KEY_BY_CODE: Dict[int, KeyInfo] = {k.code: k for k in KEYS_87}
 KEY_BY_MATRIX: Dict[int, KeyInfo] = {k.matrix_idx: k for k in KEYS_87}
 KEY_BY_NAME: Dict[str, KeyInfo] = {k.name.lower(): k for k in KEYS_87}
 
-# Lighting Preset Modes
+# Lighting Preset Modes (0-indexed per Sonix firmware 0x11 command)
 LIGHTING_MODES: Dict[str, int] = {
-    "static": 1,
-    "reactive": 2,
-    "reactive_fade": 3,
-    "glittering": 4,
-    "falling": 5,
-    "colourful": 6,
-    "breathing": 7,
-    "spectrum": 8,
-    "outward": 9,
-    "scrolling": 10,
-    "rolling": 11,
-    "rotating": 12,
-    "explode": 13,
-    "launch": 14,
-    "ripples": 15,
-    "flowing": 16,
-    "pulsating": 17,
-    "tilt": 18,
-    "shuttle": 19,
+    "static": 0,
+    "reactive": 1,
+    "reactive_fade": 2,
+    "glittering": 3,
+    "falling": 4,
+    "colourful": 5,
+    "breathing": 6,
+    "spectrum": 7,
+    "outward": 8,
+    "scrolling": 9,
+    "rolling": 10,
+    "rotating": 11,
+    "explode": 12,
+    "launch": 13,
+    "ripples": 14,
+    "flowing": 15,
+    "pulsating": 16,
+    "tilt": 17,
+    "shuttle": 18,
     "custom": 20,
 }
 

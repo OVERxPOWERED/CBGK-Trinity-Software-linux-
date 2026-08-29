@@ -133,76 +133,51 @@ class Protocol:
     @staticmethod
     def set_preset_mode(
         dev: Device,
-        mode_id: int = 1,
+        mode_id: int = 0,
         speed: int = 3,
         brightness: int = 4,
         direction: int = 0,
         r: int = 0xCB,
         g: int = 0x94,
         b: int = 0xF7,
-        color_type: int = 7
+        color_type: int = 0
     ):
         """
         Configures the built-in firmware animation modes (Static, Breathing, Wave, etc.)
         and commits the setting to onboard EEPROM memory.
         """
-        # Step 1: Start Lighting Config Session
-        hdr = bytearray(64)
-        hdr[0] = 0x04
-        hdr[1] = 0x58
-        dev.send_feature(hdr)
-        time.sleep(0.02)
+        # 1. Header packet
+        h = bytearray(64)
+        h[0] = 0x04
+        h[1] = 0x18
+        dev.send_feature(h)
+        time.sleep(0.03)
 
-        # Step 2: Mode Header
-        hdr2 = bytearray(64)
-        hdr2[0] = 0x04
-        hdr2[1] = 0x53
-        hdr2[8] = 0x03
-        dev.send_feature(hdr2)
-        time.sleep(0.02)
+        # 2. Preset Mode Packet
+        m = bytearray(64)
+        m[0] = 0x04
+        m[1] = 0x11
+        m[2] = mode_id
+        m[3] = speed
+        m[4] = brightness
+        m[5] = direction
+        m[6] = r
+        m[7] = g
+        m[8] = b
+        m[9] = 0x00
+        dev.send_feature(m)
+        time.sleep(0.03)
 
-        # Step 3: Build 192-byte Modes Table (12 modes * 16 bytes each with 0x55AA footer)
-        modes_table = bytearray(192)
-        for m in range(12):
-            off = m * 16
-            is_sel = 1 if m == mode_id else 0
-            modes_table[off + 0] = m             # Mode ID
-            modes_table[off + 1] = speed         # Speed (1..5)
-            modes_table[off + 2] = brightness    # Brightness (0..4)
-            modes_table[off + 3] = direction     # Direction (0 or 1)
-            modes_table[off + 4] = color_type    # 7 = Custom User RGB
-            modes_table[off + 5] = r
-            modes_table[off + 6] = g
-            modes_table[off + 7] = b
-            modes_table[off + 11] = is_sel       # Selection Bit
-            modes_table[off + 13] = 0xAA         # Magic footer 0x55AA
-            modes_table[off + 14] = 0x55
+        # 3. Commit Packet
+        c = bytearray(64)
+        c[0] = 0x04
+        c[1] = 0x02
+        dev.send_feature(c)
+        time.sleep(0.03)
 
-        for i in range(0, len(modes_table), 64):
-            dev.send_feature(modes_table[i:i+64])
-            time.sleep(0.01)
-
-        # Step 4: Active Mode Table (256 bytes)
-        active_buf = bytearray(256)
-        active_buf[0] = mode_id
-        active_buf[1] = speed
-        active_buf[2] = brightness
-        active_buf[3] = direction
-        active_buf[4] = color_type
-        active_buf[5] = r
-        active_buf[6] = g
-        active_buf[7] = b
-        active_buf[11] = 0x01
-        active_buf[13] = 0xAA
-        active_buf[14] = 0x55
-
-        for i in range(0, len(active_buf), 64):
-            dev.send_feature(active_buf[i:i+64])
-            time.sleep(0.01)
-
-        # Step 5: Save & Apply
-        commit_pkt = bytearray(64)
-        commit_pkt[0] = 0x04
-        commit_pkt[1] = 0x02
-        dev.send_feature(commit_pkt)
-        time.sleep(0.02)
+        # 4. Finish Packet
+        f = bytearray(64)
+        f[0] = 0x04
+        f[1] = 0xF0
+        dev.send_feature(f)
+        time.sleep(0.03)
